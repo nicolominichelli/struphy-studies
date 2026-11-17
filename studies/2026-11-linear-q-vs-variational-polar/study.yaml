@@ -1,0 +1,164 @@
+# Study of struphy-studies, see the README of the repository for the fields.
+title: "Linear MHD on polar splines: q model vs. variational p model"
+date: 2026-11-17
+# drafts are not published on the site (preview them with: python tools/build_site.py --drafts)
+draft: true
+struphy:
+  # the Struphy commit the runs were made with (pip install "struphy @ git+https://github.com/struphy-hub/struphy@<commit>")
+  commit: d0ecf8090c934185287af44ce1ab101cf4465728
+  version: "3.5.0"
+# caption of the thumbnail on the landing page
+thumbnail_caption: "Relative error of the growth rate of the kink (left) and of the Suydam mode (right) against the time step, both models, exact eigenvalues of the one-step map"
+# one sentence, shown on the landing page
+summary: On polar splines, the variational linear MHD model with L2 transport projections gives the same instabilities as the q model, converges about four times faster in the time step, conserves its energy to round-off and has no time-step-induced growing modes, at about twice the cost per unit time at equal accuracy.
+description: |
+  **Question.** Struphy has two discretizations of linear ideal MHD around a static equilibrium with a velocity in
+  H(div) that can be used on polar splines (no hole at the magnetic axis):
+  - the **q model**, `LinearMHDWithQ` (magnetic field in H(div)): a non-variational splitting into the shear Alfven
+    step, the background current, the background q = sqrt(p) and the sound step;
+  - the **variational p model**, `VariationalLinearMHD` (velocity in H(div), pressure p): the discrete Euler-Poincare
+    equations of the linearized MHD Lagrangian, with second-order fields (b-hat, p-hat) that carry the energy of the
+    equilibrium current and pressure, split into a shear Alfven/fast and a sound step.
+
+  How do they compare in accuracy, robustness against large time steps, energy behaviour and cost? On polar splines the
+  variational model needs the L2 projections in its transport operators (`transport_projection="L2"`,
+  struphy#950): with the commuting projector it has a spurious mode at the axis (finding 1). Its sound step uses the
+  Kronecker preconditioner of the Schur complement (`schur_precond="StiffnessPreconditioner"`, struphy#951). The
+  study was run with the branch of struphy#951 (stacked on #950), before their merge.
+
+  **Setup** (`cases.py`). Screw pinch (`ScrewPinch`, a = 1, B0 = 1, uniform density, length 2 pi R0, pressure from
+  the force balance plus p0 = 0.1) on `IGAPolarCylinder` with C1 polar splines, degree 3, 16 x 12 x 12 elements (32
+  radially for the convergence checks), 4 MPI ranks. Three cases:
+  - **kink**: q = 0.7 -> 1.3, R0 = 3: m = 1 internal kink, q = 1 at r = 0.71; block (m, n) = (1, -1);
+  - **stable**: q = 1.1 -> 1.9, R0 = 3: no resonance of (1, -1), stable; shear Alfven continuum
+    omega_A(r) = |1/q(r) - 1| B0 / R0 and slow continuum;
+  - **suydam**: q = 1.5 -> 2.5, R0 = 2: pressure-driven interchange (Suydam criterion violated for r < 0.82) at the
+    q = 2 surface (r = 0.71); block (2, -1).
+
+  The pressure gradient of this screw pinch (B_z constant) violates the Suydam criterion near the axis in all three
+  cases; it matters only for blocks with a resonance there. In addition, a polar **torus** (`IGAPolarTorus`, a = 1,
+  R0 = 3, 16 x 12 x 8) with `AdhocTorus` (q = 0.8 -> 2.0, beta = 0.1), toroidal block n = -1. `AdhocTorus` is
+  **not** an equilibrium: inside q = 1 the pressure gradient balances only 3-8 % of j x B. The torus results are
+  therefore only used for the time-step behaviour, not for the converged growth rates. They were computed with the
+  predecessor of `eig_block.py` (same operators and options); `run_eig_all.sh` with `TORUS=1` reproduces them.
+
+  **Analysis.**
+  - *Exact eigenvalues of the one-step map* (`eig_block.py`, all runs: `bash run_eig_all.sh`, figures and tables:
+    `python compare_eig.py`). One time step of the whole splitting is applied column by column to the basis of an
+    invariant Fourier block: (m, n) on the cylinder, including the in-plane polar degrees of freedom at the axis for
+    |m| = 1 (their m = +1 coordinate is read off the polar extraction operator); n on the torus (all poloidal harmonics,
+    1432 columns). gamma = log|lambda| / dt, omega = arg(lambda) / dt. Time runs (fits of exp(2 gamma t)) underestimate
+    the growth rate by up to 10 % at t = 60 because the modes have not separated; the eigenvalues have no such error.
+    The block is exact if the step commutes with the symmetry. The "leak", the part of the output outside the block,
+    is 1e-4 to 4e-3 on the cylinder (the projectors of the polar splines interpolate at three points per ring) and
+    1e-11 to 1e-9 on the torus.
+  - *Energy* (`params_linear.py`, `run_energy.sh`, figure: `python compare_energy.py`): time runs on the stable case,
+    T = 100, smooth helical velocity perturbation, the scalar en_tot of each model in every step.
+  - *Cost* (`profile_cost.py`, `python compare_cost.py`): wall time per step and per propagator, 8 steps after a
+    warm-up, kink case, 4 MPI ranks.
+findings: |
+  | quantity | q model | variational (L2) |
+  |---|---|---|
+  | kink gamma, dt -> 0 (16 / 32 radial elements at dt = 0.25) | 0.0472 (0.04506 / 0.04505) | 0.0472 (0.04666 / 0.04666) |
+  | kink: error of gamma at dt = 0.5 / 0.25 / 0.125 | 18 % / 4.6 % / 1.2 % | 4.9 % / 1.2 % / 0.30 % |
+  | Suydam gamma at dt = 0.125 (16 / 32 radial elements) | 0.01155 / 0.00924 | 0.01171 / 0.00916 |
+  | stable case: growing eigenvalues at dt = 0.5 / 0.25 / 0.125 | 7.4e-3 / 2.0e-4 / 1.1e-4, all at omega dt = 2.6-2.9 | none (|lambda| = 1 to 2e-13) |
+  | stable case: max change of en_tot over T = 100 (dt = 0.5 / 0.125) | 7.5e-2 / 7.0e-2 (en_tot is not an invariant of the q model) | 2.8e-13 / 5.4e-14 |
+  | cost per unit time at kink error 0.3 % (dt) | 4.0 s (0.0625) | 7.5 s (0.125) |
+  | cost per unit time at kink error 1.2 % (dt) | about 2.1 s (0.125; estimated from 0.26 s per step) | 4.2 s (0.25) |
+
+  1. **The variational model needs the L2 transport on polar splines.** With the commuting projector `Pi^1` in the
+     transport, the block of the kink has a mode at the axis (radial peak r = 0.03) with gamma = 0.155 at
+     dt = 0.25, three times faster than the kink, and it does not decrease under radial refinement (time runs: 0.154
+     at 16, 0.145 at 32 radial elements). The degrees of freedom of `Pi^1` are line integrals along edges, and at the
+     axis all radial edges start at one point, where the product of two discrete 2-forms (b x u) has no limit. The L2
+     projection uses volume integrals only. With it the mode is gone. (This block has a leak of 8e-2: the commuting
+     projectors interpolate at three points per ring at the axis, so the value 0.155 is approximate.)
+  2. **Both models give the same instabilities.** The kink converges to gamma = 0.0472 in both, and is converged in
+     the radial resolution (16 vs. 32 elements: 2e-4 for q, below 1e-5 for the variational model). The
+     pressure-driven Suydam mode agrees within 1 % at 32 radial elements (0.00924 vs. 0.00916 at dt = 0.125). It is not
+     converged radially (-20 % from 16 to 32 elements in both models), as expected for a mode localized at the
+     resonant surface.
+  3. **The variational model converges about four times faster in the time step.** Both are second order. At a
+     given dt, the error of the variational kink growth rate equals that of the q model at dt / 2 (kink), and it is
+     about 3.5 times smaller for the Suydam mode. At dt = 0.5 the q model turns the Suydam mode into a slowly rotating
+     pair with a growth rate about seven times below the dt -> 0 limit (1.8e-3 vs. 0.0127).
+  4. **The q model has time-step-induced growing modes, the variational model none.** On the stable screw pinch,
+     where no eigenvalue may grow, all eigenvalues of the variational step lie on the unit circle to round-off (the
+     discrete energy is conserved exactly and positive). The q model has growing pairs at every dt, always at
+     omega dt = 2.6-2.9 (fast waves), with gamma = 7.4e-3 at dt = 0.5, falling to 1e-4 at dt = 0.125: they move to
+     higher frequencies as dt decreases and fade only slowly. In the kink case at dt = 0.5 the same family grows faster
+     (5.2e-2) than the kink itself. Both models also show a few slowly growing pairs with gamma up to 2e-3 next to the
+     kink at small dt, at the level of the block leak.
+  5. **Energy.** The variational en_tot (including the second-order fields) is conserved to 3e-13 over 100 time
+     units at both dt. The q model has no discrete invariant: its en_tot, the quadratic energy of the perturbation,
+     exchanges energy with the equilibrium through the current and pressure terms and changes by up to 7.5 %. This is
+     not an error of the q model, but it is why its stability against the time step is not guaranteed (finding 4).
+  6. **Cost.** At equal accuracy of the kink growth rate, the variational model costs about twice as much per unit
+     time (1.85 at 0.3 %, about 2 at 1.2 %): 0.93 s per step at dt = 0.125, of which 0.73 s in the shear Alfven step
+     (BiCGStab with two operator applications per iteration, plus one mass-matrix solve per application of the L2
+     transport), against 0.25 s per step at dt = 0.0625 for the q model. Without the sound preconditioner of
+     struphy#951 the variational sound step needed 55 instead of 4 BiCGStab iterations.
+  7. **Polar torus (AdhocTorus, not an equilibrium).** The time-step behaviour is the same as on the cylinder: the q
+     model has a family of overstable modes at omega dt = 2.3-2.4 (7 pairs, gamma up to 6.2e-3 at dt = 0.5, a third
+     of the kink growth rate at dt = 0.25), the variational model at most two weak pairs (2.9e-4 at dt = 0.25), none at
+     dt = 0.5 and 0.125, and its kink growth rate is converged already at dt = 0.5. The converged growth rates of the
+     two models differ by 2 % (kink) and 8 % (second mode), and the q model shows real growing m = 1 modes at the edge
+     at dt = 0.125. With an equilibrium that is not in force balance, the two models linearize different continuous
+     problems, so these differences cannot be attributed to the discretizations.
+
+  ![Relative error of the growth rate against dt, exact eigenvalues of the one-step map; blue: q model, orange: variational model with L2 transport; left: kink, block (1, -1); right: Suydam mode, block (2, -1) (the q point at dt = 0.5 is the slowly rotating pair, error close to 1); dotted: slope 2. The limits are Richardson extrapolations of the two smallest dt.](media:figures/eig_dt_convergence.png)
+
+  ![Spectrum of the stable screw pinch (q = 1.1 -> 1.9), block (1, -1), dt = 0.125: |omega| of each eigenvalue against the radial peak of its eigenvector, left q model (blue), right variational model (orange); black: shear Alfven continuum, dashed: slow continuum; red circles: growing eigenvalues (q model only). The 17 static modes (omega = 0) are not shown.](media:figures/eig_stable_spectrum.png)
+
+  ![Stable screw pinch: growth rate of all growing eigenvalues against |omega| dt, q model at dt = 0.5 (circles), 0.25 (squares), 0.125 (triangles). The variational model has none at any dt (all |lambda| = 1 to 2e-13).](media:figures/eig_spurious.png)
+
+  ![Stable screw pinch, time runs T = 100: relative change of the scalar en_tot; blue: q model, orange: variational model; solid: dt = 0.5, dashed: dt = 0.125. For the q model en_tot is the quadratic energy of the perturbation, not an invariant.](media:figures/compare_energy.png)
+
+  ![Polar torus with AdhocTorus, block n = -1: largest spurious growth rate against dt; circles: growing eigenvalues with |omega| dt > 1, squares: other growing pairs; blue: q model, orange: variational model (missing points: none). The kink grows with gamma of about 0.016.](media:figures/eig_torus_spurious.png)
+media:
+  # the public link (without password) of the media folder on MPCDF DataShare, set by: python tools/study.py link
+  share: https://datashare.mpcdf.mpg.de/s/FQrgbTiM6NbGoAS
+figures:
+  - path: figures/eig_dt_convergence.png
+    caption: "Relative error of the growth rate against dt, exact eigenvalues of the one-step map; blue: q model, orange: variational model with L2 transport; left: kink, block (1, -1); right: Suydam mode, block (2, -1); dotted: slope 2."
+  - path: figures/eig_stable_spectrum.png
+    caption: "Stable screw pinch, block (1, -1), dt = 0.125: |omega| against the radial peak of the eigenvector, q model (left, blue) and variational model (right, orange), with the shear Alfven (black) and slow (dashed) continua; red circles: growing eigenvalues."
+  - path: figures/eig_spurious.png
+    caption: "Stable screw pinch: growth rate of the growing eigenvalues against |omega| dt, q model at dt = 0.5, 0.25, 0.125; the variational model has none."
+  - path: figures/compare_energy.png
+    caption: "Stable screw pinch, T = 100: relative change of en_tot; blue: q model, orange: variational; solid: dt = 0.5, dashed: dt = 0.125."
+  - path: figures/eig_torus_spurious.png
+    caption: "Polar torus (AdhocTorus), block n = -1: largest spurious growth rate against dt, q model (blue) and variational model (orange); circles: |omega| dt > 1, squares: other growing pairs."
+runs:
+  - name: q_stable_dt0.5
+    description: q model (LinearMHDWithQ, B in H(div)), stable case, dt = 0.5, T = 100, 16 x 12 x 12
+    params: params_linear.py
+    command: "mpirun -n 4 python params_linear.py --model q --case stable --dt 0.5 --tend 100 --sim-folder q_stable_dt0.5"
+    pproc: "python compare_energy.py"
+    videos: []
+    figures: []
+
+  - name: var_stable_dt0.5
+    description: variational p model (VariationalLinearMHD, L2 transport), stable case, dt = 0.5, T = 100, 16 x 12 x 12
+    params: params_linear.py
+    command: "mpirun -n 4 python params_linear.py --model var --case stable --dt 0.5 --tend 100 --sim-folder var_stable_dt0.5"
+    pproc: "python compare_energy.py"
+    videos: []
+    figures: []
+
+  - name: q_stable_dt0.125
+    description: q model, stable case, dt = 0.125, T = 100, 16 x 12 x 12
+    params: params_linear.py
+    command: "mpirun -n 4 python params_linear.py --model q --case stable --dt 0.125 --tend 100 --sim-folder q_stable_dt0.125"
+    pproc: "python compare_energy.py"
+    videos: []
+    figures: []
+
+  - name: var_stable_dt0.125
+    description: variational p model (L2 transport), stable case, dt = 0.125, T = 100, 16 x 12 x 12
+    params: params_linear.py
+    command: "mpirun -n 4 python params_linear.py --model var --case stable --dt 0.125 --tend 100 --sim-folder var_stable_dt0.125"
+    pproc: "python compare_energy.py"
+    videos: []
+    figures: []
