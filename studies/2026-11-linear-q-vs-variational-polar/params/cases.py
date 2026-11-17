@@ -13,7 +13,7 @@ Models
 
 Cases (polar cylinder, screw pinch, uniform density, B0 = 1, a = 1, length 2 pi R0; or polar torus)
 -----------------------------------------------------------------------------------------------------
-- ``kink``: q = 0.7 -> 1.3, R0 = 3: m = 1 internal kink (q = 1 at r = 0.41), block (m, n) = (1, -1).
+- ``kink``: q = 0.7 -> 1.3, R0 = 3: m = 1 internal kink (q = 1 at r = 0.71), block (m, n) = (1, -1).
 - ``stable``: q = 1.1 -> 1.9, R0 = 3: no q = 1 surface, block (1, -1) without resonance: stable, shear Alfven
   continuum omega_A(r) = |m/q(r) + n| B0 / R0 and discrete modes.
 - ``suydam``: q = 1.5 -> 2.5, R0 = 2: pressure-driven (Suydam-unstable) at q = 2 (r = 0.71), block (2, -1).

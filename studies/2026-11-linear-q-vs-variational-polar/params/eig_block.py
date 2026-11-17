@@ -30,6 +30,10 @@ ap.add_argument("--case", choices=list(CASES), required=True)
 ap.add_argument("--dt", type=float, required=True)
 ap.add_argument("--num-elements", type=int, nargs=3, default=None, help="default 16 12 12 (cylinder), 16 12 8 (torus)")
 ap.add_argument("--out", required=True)
+ap.add_argument("--load-A", default=None, help="one-step matrix of an earlier run (.npy): no assembly, two columns checked")
+ap.add_argument("--modes", type=int, default=0,
+                help="save the velocity of the K fastest-growing modes (and of the physical one) in a poloidal plane to "
+                     "<out>_modes.npz")
 a = ap.parse_args()
 rank = MPI.COMM_WORLD.Get_rank()
 
@@ -217,17 +221,32 @@ else:
 d = len(cols)
 if rank == 0:
     print(f"EIGSETUP {a.model} {a.case} dt={a.dt} ne={ne} d={d} ntot={ntot}", flush=True)
-A = np.zeros((d, d), dtype=complex)
 leak = 0.0
 t0 = time.time()
-for ic in range(d):
-    e = unit(ic)
-    y = step(e)
-    cy = coeffs(y)
-    A[:, ic] = cy
-    leak = max(leak, np.linalg.norm(y - recon(cy)) / np.linalg.norm(e))
-    if rank == 0 and (ic % 50 == 0 or ic == d - 1):
-        print(f"COL {ic}/{d} {(time.time() - t0) / (ic + 1):.2f}s/col leak={leak:.1e}", flush=True)
+if a.load_A:
+    A = np.load(a.load_A)
+    assert A.shape == (d, d), f"{a.load_A}: shape {A.shape}, block dimension {d}"
+    for ic in (0, d // 2):
+        e = unit(ic)
+        y = step(e)
+        cy = coeffs(y)
+        leak = max(leak, np.linalg.norm(y - recon(cy)) / np.linalg.norm(e))
+        dev = np.linalg.norm(cy - A[:, ic]) / np.linalg.norm(cy)
+        if rank == 0:
+            print(f"CHECK column {ic}: relative difference to the loaded matrix {dev:.1e}", flush=True)
+        assert dev < 1e-5, "the loaded matrix does not belong to this setup"
+else:
+    A = np.zeros((d, d), dtype=complex)
+    for ic in range(d):
+        e = unit(ic)
+        y = step(e)
+        cy = coeffs(y)
+        A[:, ic] = cy
+        leak = max(leak, np.linalg.norm(y - recon(cy)) / np.linalg.norm(e))
+        if rank == 0 and (ic % 50 == 0 or ic == d - 1):
+            print(f"COL {ic}/{d} {(time.time() - t0) / (ic + 1):.2f}s/col leak={leak:.1e}", flush=True)
+    if rank == 0:
+        np.save(os.path.splitext(a.out)[0] + "_A.npy", A)
 lam, V = np.linalg.eig(A)
 keep = np.abs(lam) > 0
 lam, V = lam[keep], V[:, keep]
@@ -259,3 +278,27 @@ if rank == 0:
     )
     print(f"DONE {a.model} {a.case} dt={a.dt} d={d} max gamma={gam.max():+.5e} leak={leak:.1e} t={time.time() - t0:.0f}s",
           flush=True)
+
+# ---------------------------------------------------------------- mode structure in a poloidal plane (eta3 = 0)
+if a.modes > 0:
+    real_grow = [i for i in order if abs(omg[i]) < 1e-6 and gam[i] > 1e-6]
+    sel = list(order[: a.modes]) + [i for i in real_grow[:1] if i not in order[: a.modes]]
+    e1 = (np.arange(64) + 0.5) / 64
+    e2 = np.arange(96) / 96
+    e3 = np.array([0.0])
+    XYZ = np.asarray(domain(e1, e2, e3, squeeze_out=True))
+    vel = model.mhd.velocity.spline
+    Us = []
+    for i in sel:
+        cy = V[:, i] / V[np.argmax(np.abs(V[:, i])), i]  # phase: largest coefficient real
+        uc = []
+        for ph in (cy, 1j * cy):  # real and imaginary part of the complex mode (phase 0 and 90 degrees)
+            set_state(recon(ph))
+            u = vel(e1, e2, e3)  # collective
+            uc.append(np.asarray(domain.push(u, e1, e2, e3, kind="2", squeeze_out=True)))
+        Us.append(uc[0] - 1j * uc[1])
+    if rank == 0:
+        # u is complex: the velocity at the axial/toroidal phase psi is Re(u exp(i psi))
+        np.savez(os.path.splitext(a.out)[0] + "_modes.npz", eta1=e1, eta2=e2, xyz=XYZ, u=np.array(Us),
+                 gamma=gam[sel], omega=omg[sel], physical=np.array([i in real_grow[:1] for i in sel]))
+        print(f"MODES saved {len(sel)}: gamma={np.round(gam[sel], 5).tolist()}", flush=True)

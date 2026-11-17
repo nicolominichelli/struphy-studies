@@ -1,5 +1,6 @@
 #!/bin/bash
-# All eigenvalue blocks of the study, one after the other on 4 MPI ranks (output beside this file: eig_<model>_<case>_dt<dt>[_r32].json)
+# All eigenvalue blocks of the study, one after the other on 4 MPI ranks (output beside this file:
+# eig_<model>_<case>_dt<dt>[_r32].json, the matrix *_A.npy and the fastest modes *_modes.npz for compare_modes.py)
 set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
@@ -9,7 +10,7 @@ mkdir -p "$OUT"
 run() {  # model case dt [extra args] [suffix]
     local tag="eig_$1_$2_dt$3${5:-}"
     [ -f "$OUT/$tag.json" ] && { echo "skip $tag"; return; }
-    mpirun -n 4 -x OMP_NUM_THREADS -x OPENBLAS_NUM_THREADS ${PYTHON:-python} eig_block.py --model "$1" --case "$2" --dt "$3" $4 \
+    mpirun -n 4 -x OMP_NUM_THREADS -x OPENBLAS_NUM_THREADS ${PYTHON:-python} eig_block.py --model "$1" --case "$2" --dt "$3" $4 --modes 3 \
         --out "$OUT/$tag.json" > "$OUT/$tag.log" 2>&1
     grep -E "DONE|Error" "$OUT/$tag.log" | tail -1
 }

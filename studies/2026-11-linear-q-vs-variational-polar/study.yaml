@@ -39,8 +39,11 @@ description: |
   cases; it matters only for blocks with a resonance there. In addition, a polar **torus** (`IGAPolarTorus`, a = 1,
   R0 = 3, 16 x 12 x 8) with `AdhocTorus` (q = 0.8 -> 2.0, beta = 0.1), toroidal block n = -1. `AdhocTorus` is
   **not** an equilibrium: inside q = 1 the pressure gradient balances only 3-8 % of j x B. The torus results are
-  therefore only used for the time-step behaviour, not for the converged growth rates. They were computed with the
-  predecessor of `eig_block.py` (same operators and options); `run_eig_all.sh` with `TORUS=1` reproduces them.
+  therefore only used for the time-step behaviour and the comparison of the two models, not for converged growth
+  rates. They were computed with the predecessor of `eig_block.py` (same operators and options); `run_eig_all.sh` with
+  `TORUS=1` reproduces them. The torus modes of finding 8 were computed from the saved matrices of these runs
+  (`eig_block.py --load-A`, which recomputes two columns as a check: relative difference 3e-9 for q, 3e-13 for the
+  variational model).
 
   **Analysis.**
   - *Exact eigenvalues of the one-step map* (`eig_block.py`, all runs: `bash run_eig_all.sh`, figures and tables:
@@ -52,6 +55,10 @@ description: |
     The block is exact if the step commutes with the symmetry. The "leak", the part of the output outside the block,
     is 1e-4 to 4e-3 on the cylinder (the projectors of the polar splines interpolate at three points per ring) and
     1e-11 to 1e-9 on the torus.
+  - *Mode structure* (`eig_block.py --modes 3`, figures: `python compare_modes.py`): the velocity of the fastest
+    eigenvectors, evaluated in a poloidal plane (z = 0, or phi = 0 on the torus) from both phases of the complex
+    eigenvector. The phase is chosen such that the dominant poloidal harmonic of u_r is real at its peak; the
+    radial profiles are the amplitudes of the poloidal Fourier harmonics (in the logical angle) of u_r, u_theta, u_z.
   - *Energy* (`params_linear.py`, `run_energy.sh`, figure: `python compare_energy.py`): time runs on the stable case,
     T = 100, smooth helical velocity perturbation, the scalar en_tot of each model in every step.
   - *Cost* (`profile_cost.py`, `python compare_cost.py`): wall time per step and per propagator, 8 steps after a
@@ -73,12 +80,23 @@ findings: |
      at 16, 0.145 at 32 radial elements). The degrees of freedom of `Pi^1` are line integrals along edges, and at the
      axis all radial edges start at one point, where the product of two discrete 2-forms (b x u) has no limit. The L2
      projection uses volume integrals only. With it the mode is gone. (This block has a leak of 8e-2: the commuting
-     projectors interpolate at three points per ring at the axis, so the value 0.155 is approximate.)
+     projectors interpolate at three points per ring at the axis, so the value 0.155 is approximate.) The eigenvector
+     shows it: the axis mode is a small vortex pair confined to r < 0.15, about two elements, and with the commuting
+     projector even the kink of the same block (gamma = 0.0450) carries a spike of its m = 1 velocity at the axis,
+     while the L2 kink is smooth there.
+
+  ![Kink block (1, -1), dt = 0.25, variational model. From the left: the fastest mode with the commuting projector (the axis mode, gamma = 0.155), the same zoomed to r < 0.15, the kink of the same scheme (gamma = 0.0450), and the fastest mode with the L2 transport (the kink, gamma = 0.0467). Color: radial velocity u_r normalized by its maximum; arrows: in-plane velocity; dashed circle: q = 1. Right: amplitude of the m = 1 harmonic of u_r against r, normalized; green: commuting (solid: axis mode, dashed: kink), orange: L2.](media:figures/modes_axis.png)
   2. **Both models give the same instabilities.** The kink converges to gamma = 0.0472 in both, and is converged in
      the radial resolution (16 vs. 32 elements: 2e-4 for q, below 1e-5 for the variational model). The
      pressure-driven Suydam mode agrees within 1 % at 32 radial elements (0.00924 vs. 0.00916 at dt = 0.125). It is not
      converged radially (-20 % from 16 to 32 elements in both models), as expected for a mode localized at the
-     resonant surface.
+     resonant surface. The eigenvectors agree as well: the kink is a rigid shift of the core inside q = 1 with the
+     return flow at the q = 1 surface, and its u_r, u_theta and u_z profiles of the two models lie on top of each
+     other. The Suydam mode is concentrated at the q = 2 surface (u_r peaks at r = 0.67, u_theta at 0.71); with 16
+     radial elements its u_theta oscillates from element to element there, and the 32-element profiles, again the same
+     in both models, are narrower.
+
+  ![Fastest-growing mode of the polar cylinder, 16 x 12 x 12, q model and variational model (L2 transport). Top: kink, block (1, -1), dt = 0.25; bottom: Suydam mode, block (2, -1), dt = 0.125. Left two columns: radial velocity (color, normalized by its maximum) and in-plane velocity (arrows) in the plane z = 0; dashed circle: resonant surface. Right: amplitude of the poloidal harmonic of the velocity components (normalized by the maximum of the in-plane velocity); blue: q model, orange: variational; kink: solid u_r, dashed u_theta, dotted u_z; Suydam: solid 16, dashed 32 radial elements.](media:figures/modes_kink_suydam.png)
   3. **The variational model converges about four times faster in the time step.** Both are second order. At a
      given dt, the error of the variational kink growth rate equals that of the q model at dt / 2 (kink), and it is
      about 3.5 times smaller for the Suydam mode. At dt = 0.5 the q model turns the Suydam mode into a slowly rotating
@@ -106,6 +124,12 @@ findings: |
      two models differ by 2 % (kink) and 8 % (second mode), and the q model shows real growing m = 1 modes at the edge
      at dt = 0.125. With an equilibrium that is not in force balance, the two models linearize different continuous
      problems, so these differences cannot be attributed to the discretizations.
+  8. **Mode structure on the torus.** The kink of the two models (dt = 0.125) has the same shape: a shift of the
+     core inside q = 1 (r = 0.41) towards the low-field side in the plane phi = 0. The toroidal coupling is weak at
+     this aspect ratio: the m = 0 and m = 2 harmonics of u_r reach 4 % and 3 % of the m = 1 harmonic, m = 3 0.2 %, in
+     both models. The profiles differ only close to the axis (r < 0.15), where the q model has a small dip.
+
+  ![Polar torus (AdhocTorus, R0 = 3, 16 x 12 x 8), block n = -1, dt = 0.125: the kink of the q model (left) and of the variational model (middle) in the plane phi = 0; color: radial velocity (distance from the axis) normalized by its maximum, arrows: in-plane velocity, dashed circle: q = 1. Right: amplitude of the poloidal harmonics |m| = 0 (dotted), 1 (solid), 2 (dashed), 3 (dash-dotted) of u_r against r; blue: q model, orange: variational.](media:figures/modes_torus.png)
 
   ![Relative error of the growth rate against dt, exact eigenvalues of the one-step map; blue: q model, orange: variational model with L2 transport; left: kink, block (1, -1); right: Suydam mode, block (2, -1) (the q point at dt = 0.5 is the slowly rotating pair, error close to 1); dotted: slope 2. The limits are Richardson extrapolations of the two smallest dt.](media:figures/eig_dt_convergence.png)
 
@@ -126,6 +150,12 @@ figures:
     caption: "Stable screw pinch, block (1, -1), dt = 0.125: |omega| against the radial peak of the eigenvector, q model (left, blue) and variational model (right, orange), with the shear Alfven (black) and slow (dashed) continua; red circles: growing eigenvalues."
   - path: figures/eig_spurious.png
     caption: "Stable screw pinch: growth rate of the growing eigenvalues against |omega| dt, q model at dt = 0.5, 0.25, 0.125; the variational model has none."
+  - path: figures/modes_axis.png
+    caption: "Kink, dt = 0.25, variational model: fastest mode with the commuting projector (axis mode, also zoomed), the kink of that scheme, and the kink with the L2 transport; u_r (color) and in-plane velocity (arrows), with the m = 1 profiles of u_r."
+  - path: figures/modes_kink_suydam.png
+    caption: "Kink (dt = 0.25) and Suydam mode (dt = 0.125) of the q model and the variational model in the plane z = 0, with the radial profiles of the poloidal harmonic (Suydam at 16 and 32 radial elements)."
+  - path: figures/modes_torus.png
+    caption: "Polar torus (AdhocTorus), n = -1, dt = 0.125: kink of the q model and the variational model in the plane phi = 0, and the poloidal harmonics m = 0..3 of u_r against r."
   - path: figures/compare_energy.png
     caption: "Stable screw pinch, T = 100: relative change of en_tot; blue: q model, orange: variational; solid: dt = 0.5, dashed: dt = 0.125."
   - path: figures/eig_torus_spurious.png
