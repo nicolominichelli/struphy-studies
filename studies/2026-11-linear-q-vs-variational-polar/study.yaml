@@ -10,7 +10,7 @@ struphy:
 # caption of the thumbnail on the landing page
 thumbnail_caption: "Relative error of the growth rate of the kink (left) and of the Suydam mode (right) against the time step, both models, exact eigenvalues of the one-step map"
 # one sentence, shown on the landing page
-summary: On polar splines, the variational linear MHD model with L2 transport projections gives the same instabilities as the q model, converges about four times faster in the time step, conserves its energy to round-off and has no time-step-induced growing modes, at about twice the cost per unit time at equal accuracy.
+summary: On polar splines, the variational linear MHD model with L2 transport projections gives the same instabilities as the q model, converges about four times faster in the time step, conserves its energy to round-off and has no time-step-induced growing modes, at about twice the cost per unit time at equal accuracy; both models share a static grid-scale instability at the shortest axial wave when the number of axial elements is even.
 description: |
   **Question.** Struphy has two discretizations of linear ideal MHD around a static equilibrium with a velocity in
   H(div) that can be used on polar splines (no hole at the magnetic axis):
@@ -63,13 +63,19 @@ description: |
     T = 100, smooth helical velocity perturbation, the scalar en_tot of each model in every step.
   - *Cost* (`profile_cost.py`, `python compare_cost.py`): wall time per step and per propagator, 8 steps after a
     warm-up, kink case, 4 MPI ranks.
+  - *Shortest axial wave* (`bash run_nyquist.sh`, figures: `python compare_nyquist.py`, `python compare_timerun.py`):
+    kink time runs at dt = 0.5 up to T = 400 (velocity saved), the blocks (1, N3 // 2) for 8 to 24 axial elements
+    N3, and `check_nyquist_kernel.py`: the norm of b = -curl P(B0 x u) for smooth m = 1 waves in each velocity
+    component, with P = Pi^1 (q model) and P = L2 projection (variational model).
 findings: |
   | quantity | q model | variational (L2) |
   |---|---|---|
   | kink gamma, dt -> 0 (16 / 32 radial elements at dt = 0.25) | 0.0472 (0.04506 / 0.04505) | 0.0472 (0.04666 / 0.04666) |
   | kink: error of gamma at dt = 0.5 / 0.25 / 0.125 | 18 % / 4.6 % / 1.2 % | 4.9 % / 1.2 % / 0.30 % |
   | Suydam gamma at dt = 0.125 (16 / 32 radial elements) | 0.01155 / 0.00924 | 0.01171 / 0.00916 |
-  | stable case: growing eigenvalues at dt = 0.5 / 0.25 / 0.125 | 7.4e-3 / 2.0e-4 / 1.1e-4, all at omega dt = 2.6-2.9 | none (|lambda| = 1 to 2e-13) |
+  | stable case, block (1, -1): growing eigenvalues at dt = 0.5 / 0.25 / 0.125 | 7.4e-3 / 2.0e-4 / 1.1e-4, all at omega dt = 2.6-2.9 | none (|lambda| = 1 to 2e-13) |
+  | static mode of the shortest axial wave, block (1, N3 / 2), kink case: N3 = 12 / 16 / 24 (odd N3 = 11, 13) | 0.182 / 0.251 / 0.315 (none) | 0.184 / 0.253 / 0.318 (none) |
+  | the same, stable case, N3 = 12 | 0.120 | 0.120 |
   | stable case: max change of en_tot over T = 100 (dt = 0.5 / 0.125) | 7.5e-2 / 7.0e-2 (en_tot is not an invariant of the q model) | 2.8e-13 / 5.4e-14 |
   | cost per unit time at kink error 0.3 % (dt) | 4.0 s (0.0625) | 7.5 s (0.125) |
   | cost per unit time at kink error 1.2 % (dt) | about 2.1 s (0.125; estimated from 0.26 s per step) | 4.2 s (0.25) |
@@ -102,8 +108,9 @@ findings: |
      about 3.5 times smaller for the Suydam mode. At dt = 0.5 the q model turns the Suydam mode into a slowly rotating
      pair with a growth rate about seven times below the dt -> 0 limit (1.8e-3 vs. 0.0127).
   4. **The q model has time-step-induced growing modes, the variational model none.** On the stable screw pinch,
-     where no eigenvalue may grow, all eigenvalues of the variational step lie on the unit circle to round-off (the
-     discrete energy is conserved exactly and positive). The q model has growing pairs at every dt, always at
+     where no eigenvalue may grow, all eigenvalues of the variational step in the block (1, -1) lie on the unit
+     circle to round-off (the discrete energy is conserved exactly and positive in this block; finding 9 shows a block
+     where it is not, in both models, from the spatial discretization). The q model has growing pairs at every dt, always at
      omega dt = 2.6-2.9 (fast waves), with gamma = 7.4e-3 at dt = 0.5, falling to 1e-4 at dt = 0.125: they move to
      higher frequencies as dt decreases and fade only slowly. In the kink case at dt = 0.5 the same family grows faster
      (5.2e-2) than the kink itself. Both models also show a few slowly growing pairs with gamma up to 2e-3 next to the
@@ -112,6 +119,7 @@ findings: |
      units at both dt. The q model has no discrete invariant: its en_tot, the quadratic energy of the perturbation,
      exchanges energy with the equilibrium through the current and pressure terms and changes by up to 7.5 %. This is
      not an error of the q model, but it is why its stability against the time step is not guaranteed (finding 4).
+     These runs are too short to see the grid-scale mode of finding 9: from round-off it needs about 300 time units.
   6. **Cost.** At equal accuracy of the kink growth rate, the variational model costs about twice as much per unit
      time (1.85 at 0.3 %, about 2 at 1.2 %): 0.93 s per step at dt = 0.125, of which 0.73 s in the shear Alfven step
      (BiCGStab with two operator applications per iteration, plus one mass-matrix solve per application of the L2
@@ -128,6 +136,40 @@ findings: |
      core inside q = 1 (r = 0.41) towards the low-field side in the plane phi = 0. The toroidal coupling is weak at
      this aspect ratio: the m = 0 and m = 2 harmonics of u_r reach 4 % and 3 % of the m = 1 harmonic, m = 3 0.2 %, in
      both models. The profiles differ only close to the axis (r < 0.15), where the q model has a small dip.
+  9. **Both models have a static grid-scale instability at the shortest axial wave (even number of axial
+     elements).** Kink time runs at dt = 0.5 grow with the kink eigenvalue up to t = 240 (the time-step-induced pair
+     of the q model, 0.052 in this block, is hardly excited by the smooth seed), then both are taken over by a mode
+     with gamma = 0.182 (q) and 0.184 (variational), m = +-1 and n = 6, the shortest axial wave of 12 axial
+     elements, grown from round-off. Its block has a real eigenvalue with exactly these growth rates, independent of
+     dt (0.185 at dt = 0.125) and of the radial resolution (identical with 32 radial elements); it exists in the
+     stable case too (0.120) and grows with the axial resolution (0.25 at 16, 0.31 at 24 axial elements, block
+     (1, N3 / 2)), while 8 axial elements are stable. Physically, (1, 6) is strongly stable (field-line bending at
+     k_z = 2). The mode is a smooth m = 1 shift of the whole cross-section, largest at the axis, whose sign alternates
+     from one axial element to the next, staggered with an m = 1 axial flow: u_z vanishes half an element off the
+     knots, the in-plane velocity at the knots.
+
+     The cause is a kernel of the projection of B0 x u into V1, the same in both models. With degree 3, the in-plane
+     components of a 2-form are quadratic splines along z, the in-plane components of a 1-form cubic. At the
+     alternating (shortest) wave the quadratic part vanishes at the knots, where Pi^1 interpolates, and is orthogonal
+     on every element to the alternating cubic, so the L2 projection gives zero too. A poloidal velocity at this
+     wave then creates no magnetic perturbation at all, and nothing restores it against the pressure gradient (the
+     Suydam criterion is violated near the axis of this screw pinch). The norm of b = -curl P(B0 x u) relative to u,
+     for a smooth m = 1 wave in one component of u, 12 axial elements:
+
+     | component of u | n = 1 | n = 4 | n = 5 | n = 6 (shortest) |
+     |---|---|---|---|---|
+     | u^2 (poloidal flux), Pi^1 / L2 | 2.18 / 2.18 | 2.09 / 2.50 | 1.35 / 2.27 | 1.2e-14 / 1.4e-14 |
+     | u^1 (radial flux), Pi^1 / L2 | 5.04 / 5.05 | 4.38 / 5.20 | 2.79 / 4.50 | 0.68 / 0.68 |
+     | u^3 (axial flux), Pi^1 / L2 | 0.41 / 0.41 | 0.47 / 0.47 | 0.51 / 0.51 | 0.54 / 0.54 |
+
+     With an odd number of axial elements there is no alternating wave: with 11 elements the poloidal component at
+     n = 5 gives 0.76 (Pi^1) and 1.56 (L2), and the blocks (1, 5) of 11 and (1, 6) of 13 axial elements have no
+     static growing mode in either model. The kernel does not depend on the polar splines and arises in any periodic
+     direction with an even number of elements; an odd number avoids it but does not remove the cause.
+
+  ![Kink, time runs at dt = 0.5, T = 400, 16 x 12 x 12, helical seed (1, -1): left, the kinetic energy en_U; right, its local growth rate 0.5 d ln(en_U)/dt (10 time units windows); blue: q model, orange: variational; dashed: kink eigenvalue of the one-step map at dt = 0.5, dotted: fastest oscillating growing pair of the block (1, -1). From t = 250 both runs grow with the static mode of the block (1, 6).](media:figures/timerun_kink.png)
+
+  ![Static mode of the shortest axial wave, kink case, dt = 0.5. Left: its growth rate against the number of axial elements N3 (block (1, N3 // 2)), q model (blue) and variational (orange); circles: even N3, crosses: odd N3 (no static mode), diamonds: 32 radial elements. Middle: N3 = 12, the axial velocity u_z in the plane z = 0 (q and variational, normalized) and the in-plane velocity of the q model half an element further in z. Right: the m = 1 harmonics against r, normalized; dotted: u_z at z = 0, solid: u_r half an element further.](media:figures/nyquist.png)
 
   ![Polar torus (AdhocTorus, R0 = 3, 16 x 12 x 8), block n = -1, dt = 0.125: the kink of the q model (left) and of the variational model (middle) in the plane phi = 0; color: radial velocity (distance from the axis) normalized by its maximum, arrows: in-plane velocity, dashed circle: q = 1. Right: amplitude of the poloidal harmonics |m| = 0 (dotted), 1 (solid), 2 (dashed), 3 (dash-dotted) of u_r against r; blue: q model, orange: variational.](media:figures/modes_torus.png)
 
@@ -156,6 +198,10 @@ figures:
     caption: "Kink (dt = 0.25) and Suydam mode (dt = 0.125) of the q model and the variational model in the plane z = 0, with the radial profiles of the poloidal harmonic (Suydam at 16 and 32 radial elements)."
   - path: figures/modes_torus.png
     caption: "Polar torus (AdhocTorus), n = -1, dt = 0.125: kink of the q model and the variational model in the plane phi = 0, and the poloidal harmonics m = 0..3 of u_r against r."
+  - path: figures/timerun_kink.png
+    caption: "Kink, time runs at dt = 0.5: kinetic energy and its local growth rate, q model (blue) and variational (orange), with the eigenvalues of the one-step map; both are taken over by the static mode of the block (1, 6) at t = 250."
+  - path: figures/nyquist.png
+    caption: "Static mode of the shortest axial wave: growth rate against the number of axial elements (even: circles, odd: crosses), the mode for 12 axial elements, and its radial profiles; q model (blue) and variational (orange)."
   - path: figures/compare_energy.png
     caption: "Stable screw pinch, T = 100: relative change of en_tot; blue: q model, orange: variational; solid: dt = 0.5, dashed: dt = 0.125."
   - path: figures/eig_torus_spurious.png
@@ -190,5 +236,21 @@ runs:
     params: params_linear.py
     command: "mpirun -n 4 python params_linear.py --model var --case stable --dt 0.125 --tend 100 --sim-folder var_stable_dt0.125"
     pproc: "python compare_energy.py"
+    videos: []
+    figures: []
+
+  - name: q_kink_dt0.5
+    description: q model, kink case, dt = 0.5, T = 400, 16 x 12 x 12, velocity saved (finding 9)
+    params: params_linear.py
+    command: "mpirun -n 4 python params_linear.py --model q --case kink --dt 0.5 --tend 400 --save-velocity --sim-folder q_kink_dt0.5"
+    pproc: "python compare_timerun.py"
+    videos: []
+    figures: []
+
+  - name: var_kink_dt0.5
+    description: variational p model (L2 transport), kink case, dt = 0.5, T = 400, 16 x 12 x 12, velocity saved (finding 9)
+    params: params_linear.py
+    command: "mpirun -n 4 python params_linear.py --model var --case kink --dt 0.5 --tend 400 --save-velocity --sim-folder var_kink_dt0.5"
+    pproc: "python compare_timerun.py"
     videos: []
     figures: []

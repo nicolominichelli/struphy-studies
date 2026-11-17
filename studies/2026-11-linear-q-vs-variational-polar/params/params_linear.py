@@ -23,6 +23,7 @@ parser.add_argument("--case", default="stable", choices=["kink", "stable", "suyd
 parser.add_argument("--dt", type=float, default=0.5)
 parser.add_argument("--tend", type=float, default=100.0)
 parser.add_argument("--num-elements", type=int, nargs=3, default=[16, 12, 12])
+parser.add_argument("--save-velocity", action="store_true", help="also save the velocity (every step).")
 parser.add_argument("--test-run", action="store_true", help="8 x 6 x 4 elements, two time steps.")
 args, _ = parser.parse_known_args()
 if args.test_run:
@@ -65,7 +66,7 @@ class HelicalSeed(Perturbation):
 
 
 model = make_model(args.model)
-model.mhd.velocity.save_data = False
+model.mhd.velocity.save_data = args.save_velocity
 model.em_fields.b_field.save_data = False
 for comp in (0, 1):
     model.mhd.velocity.add_perturbation(perturbation=HelicalSeed(comp, Lz))

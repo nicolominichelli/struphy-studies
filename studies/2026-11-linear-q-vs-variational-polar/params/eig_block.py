@@ -30,6 +30,8 @@ ap.add_argument("--case", choices=list(CASES), required=True)
 ap.add_argument("--dt", type=float, required=True)
 ap.add_argument("--num-elements", type=int, nargs=3, default=None, help="default 16 12 12 (cylinder), 16 12 8 (torus)")
 ap.add_argument("--out", required=True)
+ap.add_argument("--mn", type=int, nargs=2, default=None, help="other block (m, n) than the one of the case (cylinder)")
+ap.add_argument("--plane-eta3", type=float, default=0.0, help="logical eta3 of the plane of --modes")
 ap.add_argument("--load-A", default=None, help="one-step matrix of an earlier run (.npy): no assembly, two columns checked")
 ap.add_argument("--modes", type=int, default=0,
                 help="save the velocity of the K fastest-growing modes (and of the physical one) in a poloidal plane to "
@@ -113,7 +115,7 @@ def step(x):
     return get() * nx
 
 
-mm, nn = case["mn"]
+mm, nn = a.mn or case["mn"]
 # the in-plane polar pair of a 2-form is a vector at the axis: it carries only the poloidal harmonics m = +-1
 segs_pol = [(f, sh, off) for f, c, kind, sh, off in layout if kind == "pol" and sh[0] == 2]
 if not torus and abs(mm) != 1:
@@ -272,7 +274,7 @@ if rank == 0:
         print(f"EIG {a.model} {a.case} dt={a.dt}: gamma={gam[i]:+.5e} omega={omg[i]:+.4e} m={mdom[i]} r_peak~{rpeak[i]:.2f}",
               flush=True)
     json.dump(
-        dict(model=a.model, case=a.case, dt=a.dt, num_elements=ne, mn=case["mn"], d=d, leak=leak, t=time.time() - t0,
+        dict(model=a.model, case=a.case, dt=a.dt, num_elements=ne, mn=[mm, nn], d=d, leak=leak, t=time.time() - t0,
              gamma=gam.tolist(), omega=omg.tolist(), rpeak=rpeak.tolist(), m=[int(x) for x in mdom]),
         open(a.out, "w"),
     )
@@ -285,7 +287,7 @@ if a.modes > 0:
     sel = list(order[: a.modes]) + [i for i in real_grow[:1] if i not in order[: a.modes]]
     e1 = (np.arange(64) + 0.5) / 64
     e2 = np.arange(96) / 96
-    e3 = np.array([0.0])
+    e3 = np.array([a.plane_eta3])
     XYZ = np.asarray(domain(e1, e2, e3, squeeze_out=True))
     vel = model.mhd.velocity.spline
     Us = []
