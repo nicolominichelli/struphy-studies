@@ -27,4 +27,5 @@ for m in q var; do
         --out "$OUT/nyq_${m}_r16_z12_mid.json" > "$OUT/nyq_${m}_r16_z12_mid.log" 2>&1
 done
 for nz in 12 11; do $MPI check_nyquist_kernel.py --nz $nz; done
+for g in hollow slab; do $MPI check_nyquist_kernel.py --nz 12 --geom $g; done
 echo NYQUIST_DONE

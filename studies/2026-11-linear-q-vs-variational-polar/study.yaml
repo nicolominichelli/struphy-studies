@@ -66,7 +66,8 @@ description: |
   - *Shortest axial wave* (`bash run_nyquist.sh`, figures: `python compare_nyquist.py`, `python compare_timerun.py`):
     kink time runs at dt = 0.5 up to T = 400 (velocity saved), the blocks (1, N3 // 2) for 8 to 24 axial elements
     N3, and `check_nyquist_kernel.py`: the norm of b = -curl P(B0 x u) for smooth m = 1 waves in each velocity
-    component, with P = Pi^1 (q model) and P = L2 projection (variational model).
+    component, with P = Pi^1 (q model) and P = L2 projection (variational model), on the polar cylinder and,
+    without polar splines, on a hollow cylinder and a periodic slab (`--geom hollow|slab`).
 findings: |
   | quantity | q model | variational (L2) |
   |---|---|---|
@@ -164,8 +165,16 @@ findings: |
 
      With an odd number of axial elements there is no alternating wave: with 11 elements the poloidal component at
      n = 5 gives 0.76 (Pi^1) and 1.56 (L2), and the blocks (1, 5) of 11 and (1, 6) of 13 axial elements have no
-     static growing mode in either model. The kernel does not depend on the polar splines and arises in any periodic
-     direction with an even number of elements; an odd number avoids it but does not remove the cause.
+     static growing mode in either model. An odd number avoids the kernel but does not remove the cause.
+
+     The kernel does not come from the polar splines (`check_nyquist_kernel.py --geom hollow|slab`, 12 axial
+     elements, n = 6, Pi^1 / L2): on a `HollowCylinder` (r = 0.2 to 1, no axis, no polar splines) with the same screw
+     pinch, the poloidal component gives 1.0e-14 / 1.0e-14 and the radial one 0.90 / 0.90; on a periodic slab with
+     B0 = e_z (`Cuboid`, `HomogenSlab`), both in-plane components give zero (1e-14 to 4e-14), while n = 1 to 5 give 2 to
+     6. It arises in any H(div) velocity discretization that projects B0 x u into V1 along a periodic direction with an
+     even number of elements; in the cylinders the radial component keeps a coupling only through the poloidal field.
+     Better quadrature or another projector into V1 cannot remove it (the L2 projection already gives zero); it needs a
+     change of the spaces in this coupling.
 
   ![Kink, time runs at dt = 0.5, T = 400, 16 x 12 x 12, helical seed (1, -1): left, the kinetic energy en_U; right, its local growth rate 0.5 d ln(en_U)/dt (10 time units windows); blue: q model, orange: variational; dashed: kink eigenvalue of the one-step map at dt = 0.5, dotted: fastest oscillating growing pair of the block (1, -1). From t = 250 both runs grow with the static mode of the block (1, 6).](media:figures/timerun_kink.png)
 
