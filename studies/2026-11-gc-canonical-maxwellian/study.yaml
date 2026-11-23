@@ -8,14 +8,15 @@ struphy:
   commit: 82f76f386
   version: "3.6.1"
 # one sentence, shown on the landing page
-summary: A canonical Maxwellian of guiding centers in an ad hoc tokamak stays stationary up to t = 100 (about 20 transit times of thermal ions) to the level of the Monte-Carlo noise, with drifts through the magnetic axis; first run of a planned parameter study.
-thumbnail_caption: "Run base: guiding-center distribution in the poloidal plane, in (r, v_par) and in (v_par, mu) at t = 0 and t = 100 and the change f(100) - f(0)"
+summary: "A canonical Maxwellian of guiding centers in an ad hoc tokamak stays stationary up to t = 100 to the level of the Monte-Carlo noise with all three pushers, while a gyro-Maxwellian control and a canonical Maxwellian with the on-axis shift develop a parallel-velocity asymmetry from the radial shift of the passing orbits."
+thumbnail_caption: "Change f(100) - f(0) of the guiding-center distribution in (r, v_par): exact canonical Maxwellian (left), on-axis shift B0 (middle), gyro-Maxwellian control (right)"
 description: |
   **Question.** Does a canonical Maxwellian, a function of the constants of motion of guiding-center orbits, stay
   stationary over long times in a tokamak with the guiding-center pushers of Struphy (model `GuidingCenter`, discrete
-  gradients) and C1 polar splines at the magnetic axis? This page has the base run; runs with other shifts of psi_c
-  (none, B0), a gyro-Maxwellian control, other epsilon (0.02, 0.1) and other pushers (discrete gradient 2nd order,
-  explicit RK4) are planned (`run_case.sh` takes their flags).
+  gradients) and C1 polar splines at the magnetic axis, and can the diagnostics tell it from distributions that are
+  not stationary? Eight runs: the base run (exact equilibrium), the other shifts of psi_c (none: exact; B0: not
+  exact), a gyro-Maxwellian control with the same profiles in the position (not an equilibrium), epsilon = 0.02 and
+  0.1, and the pushers discrete gradient 2nd order and explicit RK4, each changing one thing against the base run.
 
   **Setup.** Example `GuidingCenter/tokamak_equilibrium` (`params_tokamak_equilibrium.py`). Guiding centers
   f(X, v_par, mu, t) in a static field, with parallel streaming, the mirror force and the grad-B and curvature drifts
@@ -28,46 +29,76 @@ description: |
   P_phi (`shift="Bmax"`), which keeps psi_c a constant of motion, so f0 is an exact equilibrium (Jeans' theorem).
   Grid 16 x 48 x 48, cubic splines, 25 markers per cell (921,600 markers, drawn uniformly on the disc, weights
   f0 / s0), dt = 0.2, T = 100 (500 steps), both pushers discrete gradient 1st order, markers leaving the plasma at
-  r = a are removed. 4 MPI ranks, 38 min. The Struphy commit is on the branch of struphy-hub/struphy#949 (the
-  `--shift` flag and the pictures of this page).
+  r = a are removed. All runs use the same markers (seed 1234): the runs with epsilon = 0.05 and the same pusher
+  differ only in the weights. 4 MPI ranks, 30 - 51 min per run. The Struphy commit is on the branch of
+  struphy-hub/struphy#949 (the `--shift` flag and the pictures of this page); `run_case.sh` runs and post-processes
+  one run, `compare.py` makes the comparison.
 
   **Analysis** (`pproc_tokamak_equilibrium.py`). The markers are binned every 5 steps in r = eta1 a, in the
   poloidal plane (eta1, eta2), in v_par, mu, (r, v_par) and (v_par, mu) (density, divided by the Jacobian). The
   change f(t) - f(0) uses the same markers with fixed weights, so it contains only the noise of the marker motion,
   not that of the initial loading. Trapped-passing boundaries at the outboard midplane: v_par² = 2 mu (B_max -
   B_min) on the flux surface (in (r, v_par) for mu B_min = vth²). Color scales are clipped at the 99.5th
-  percentile, because the division by the Jacobian makes single bins at the axis very noisy.
+  percentile, because the division by the Jacobian makes single bins at the axis very noisy. The runs are compared
+  by the relative L2 deviation from t = 0 of the distributions binned in r and in v_par (the 2D slices have too
+  few markers per bin), as medians over t = 5 - 25 and t = 75 - 100, since single markers next to the axis cause
+  spikes.
 findings: |
-  | slice | relative L2 deviation from t = 0, median t = 5 - 25 | median t = 75 - 100 |
-  |---|---|---|
-  | r | 0.017 | 0.017 |
-  | v_par | 0.015 | 0.023 |
-  | mu | 0.006 | 0.009 |
-  | poloidal plane (r, theta) | 0.16 | 0.16 |
-  | (r, v_par) | 0.082 | 0.118 |
-  | (v_par, mu) | 0.063 | 0.082 |
+  | run | dev. r, t = 5-25 / 75-100 | dev. v_par, t = 5-25 / 75-100 | max energy drift | lost markers | time |
+  |---|---|---|---|---|---|
+  | base (shift Bmax, exact) | 0.017 / 0.017 (-1%) | 0.015 / 0.023 (+57%) | 6.4e-4 | 71,544 | 38 min |
+  | shift_none (exact) | 0.018 / 0.018 (-1%) | 0.014 / 0.022 (+63%) | 1.5e-3 | 71,544 | 37 min |
+  | shift_b0 (not exact) | 0.017 / 0.019 (+13%) | 0.018 / 0.035 (+90%) | 1.1e-3 | 71,544 | 37 min |
+  | gyro (control) | 0.018 / 0.030 (+64%) | 0.015 / 0.038 (+148%) | 1.6e-3 | 71,544 | 37 min |
+  | eps0.02 | 0.010 / 0.014 (+45%) | 0.015 / 0.014 (-6%) | 3.4e-5 | 28,952 | 30 min |
+  | eps0.1 | 0.020 / 0.023 (+17%) | 0.018 / 0.024 (+32%) | 7.1e-3 | 140,268 | 51 min |
+  | dg2 | 0.016 / 0.017 (+1%) | 0.015 / 0.021 (+46%) | 5.4e-4 | 71,528 | 46 min |
+  | rk4 | 0.016 / 0.016 (+1%) | 0.015 / 0.021 (+47%) | 5.4e-4 | 71,543 | 34 min |
 
-  1. **The distribution stays stationary to the level of the noise.** f at t = 100 cannot be told from f at t = 0
-     in any of the views; f(t) - f(0) is noise without structure (no shift across the trapped-passing boundary, no
-     radial transport), largest near the axis where the bins are small.
-  2. **The deviation has no systematic drift in r and in the poloidal plane** (1.7% and 16%, the latter for bins
-     with few markers). In the slices with v_par it grows slowly, by 30 - 50% from the first to the last quarter
-     of the run (e.g. 1.5% to 2.3% in v_par). Whether this is the noise of the marker motion or a slow relaxation
-     is open; the planned runs (gyro-Maxwellian control, shift = B0, other epsilon and pushers) will tell.
-  3. **Spikes of the deviation** (at t = 2, 58, 72, 97, up to 100% in the 2D slices) come from single markers close
-     to the magnetic axis, whose weight is divided by the small Jacobian of their bin; they are an artifact of the
-     binning, visible as single bright bins in the pictures.
-  4. **Losses and energy.** 71,500 markers (7.8%) leave the plasma at r = a up to t = 100, but they carry only
-     1.7e-4 of the mass (the density vanishes at the edge). The total energy drifts by -6.4e-4, mostly through
-     these losses.
+  1. **The exact equilibria stay stationary.** For shift Bmax and shift None, f(100) - f(0) is noise without
+     structure in all views, and the deviation in r has no drift (1.7% - 1.8% at early and late times). The same
+     holds for all three pushers.
+  2. **The diagnostics see the distributions that are not stationary.** The gyro-Maxwellian control develops a
+     change that is odd in v_par at r/a = 0.4 - 0.9, close to the trapped-passing boundary: more particles with
+     v_par > 0, fewer with v_par < 0 (figure below). This is the radial shift of the passing orbits by the drifts,
+     in opposite directions for co- and counter-passing particles, which moves the density gradient by plus or minus
+     an orbit width. Its deviation grows by 64% in r and by 148% in v_par (to 3.8%). The canonical Maxwellian with
+     the on-axis shift B0 shows the same pattern, weaker (+90% in v_par, to 3.5%), as expected since psi_c jumps only
+     for the barely trapped particles.
+  3. **A slower growth in v_par remains for the exact equilibria** (+46% to +63%, to 2.1% - 2.3%), about the same
+     for discrete gradient 1st and 2nd order and RK4, so it is not an error of the time integration. It does not
+     appear for epsilon = 0.02 (-6%); it is most likely the decorrelation of the Monte-Carlo noise of the fixed
+     markers by the drifts, not a relaxation of f (no structure in f(100) - f(0)).
+  4. **epsilon.** Smaller drifts give smaller deviations and losses (epsilon = 0.02: 1.0% - 1.4% in r, 29k lost
+     markers, energy drift 3.4e-5); larger drifts larger ones (epsilon = 0.1: 140k lost markers, energy drift
+     7.1e-3, and more spikes from markers crossing the axis region, where the orbits are widest).
+  5. **Pushers.** Discrete gradient 2nd order and explicit RK4 give the same deviations (1.6%, 2.1%) and energy
+     drift (5.4e-4), slightly below discrete gradient 1st order (1.7%, 2.3%, 6.4e-4); RK4 is the fastest (34 min,
+     dg1 38 min, dg2 46 min).
+  6. **Losses and energy.** The runs with epsilon = 0.05 lose the same 71,500 markers (7.8%; same markers, same
+     orbits), which carry only 1.7e-4 of the mass in the base run (the density vanishes at the edge). The energy
+     drift comes mostly from these losses; it differs between the initial conditions because the weights of the lost
+     edge markers differ.
+  7. **Spikes of the deviation** (up to 100% in the 2D slices) come from single markers close to the magnetic axis,
+     whose weight is divided by the small Jacobian of their bin: an artifact of the binning.
+
+  ![Change f(100) - f(0) in (r, v_par), normalized to the 99.5th percentile of f(0), common color scale: runs base (left, exact equilibrium), shift_b0 (middle) and gyro (right, control); dashed: trapped-passing boundary at the outboard midplane for mu B_min = vth².](media:figures/compare_change_rv.png)
+
+  ![Relative L2 deviation from t = 0 of the distributions binned in r (left) and in v_par (right), running median over 7 saved times; one color per run (legend). The remaining peaks of eps0.1 are bursts of markers next to the axis.](media:figures/compare_deviation.png)
+
+  ![Change f(100) - f(0) of all runs in the poloidal plane (top) and in (r, v_par) (bottom), common color scale per row; run names above the panels.](media:figures/compare_change.png)
 
   ![Run base: the binned distribution in the poloidal plane (top), in (r, v_par) (middle) and in (v_par, mu) (bottom), at t = 0 (left), t = 100 (middle) and the change f(100) - f(0) (right, red/blue), normalized to the 99.5th percentile of f(0); dashed: trapped-passing boundaries at the outboard midplane (trapped inside in (r, v_par), above the cones in (v_par, mu)).](media:runs/base/figures/distribution.png)
-
-  ![Run base: relative L2 deviation of the binned distributions from t = 0, one color per slice.](media:runs/base/figures/deviation.png)
 media:
   # the public link (without password) of the media folder on MPCDF DataShare, set by: python tools/study.py link
   share: https://datashare.mpcdf.mpg.de/s/TN7EQgKk5KEGMEp
-figures: []
+figures:
+  - path: figures/compare_change_rv.png
+    caption: "Change f(100) - f(0) in (r, v_par) of the runs base (left), shift_b0 (middle) and gyro (right), common color scale."
+  - path: figures/compare_deviation.png
+    caption: "Relative L2 deviation from t = 0 in r (left) and v_par (right), running median over 7 saved times, all runs (legend)."
+  - path: figures/compare_change.png
+    caption: "Change f(100) - f(0) of all runs in the poloidal plane (top) and in (r, v_par) (bottom), common color scale per row."
 runs:
   - name: base
     description: canonical Maxwellian, shift Bmax, epsilon = 0.05, discrete gradient 1st order, grid 16 x 48 x 48, 25 markers per cell, T = 100
@@ -86,3 +117,129 @@ runs:
       - runs/base/figures/deviation.png
       - runs/base/figures/distribution.png
       - runs/base/figures/scalars.png
+
+  - name: shift_none
+    description: "canonical Maxwellian without shift of psi_c (exact equilibrium)"
+    params: params_tokamak_equilibrium.py
+    command: "mpirun -n 4 python params_tokamak_equilibrium.py --sim-folder shift_none --save-step 5 --shift none"  # or: bash run_case.sh shift_none --shift none
+    pproc: "python pproc_tokamak_equilibrium.py shift_none --save-step 5 --shift none --video"
+    videos:
+      - runs/shift_none/videos/distribution.mp4
+    figures:
+      - runs/shift_none/figures/binning_e1_density.png
+      - runs/shift_none/figures/binning_e1_e2_density.png
+      - runs/shift_none/figures/binning_e1_v1_density.png
+      - runs/shift_none/figures/binning_v1_density.png
+      - runs/shift_none/figures/binning_v1_v2_density.png
+      - runs/shift_none/figures/binning_v2_density.png
+      - runs/shift_none/figures/deviation.png
+      - runs/shift_none/figures/distribution.png
+      - runs/shift_none/figures/scalars.png
+
+  - name: shift_b0
+    description: "canonical Maxwellian, shift with the on-axis field B0 (not exactly stationary: psi_c jumps at the bounce points of barely trapped particles)"
+    params: params_tokamak_equilibrium.py
+    command: "mpirun -n 4 python params_tokamak_equilibrium.py --sim-folder shift_b0 --save-step 5 --shift B0"  # or: bash run_case.sh shift_b0 --shift B0
+    pproc: "python pproc_tokamak_equilibrium.py shift_b0 --save-step 5 --shift B0 --video"
+    videos:
+      - runs/shift_b0/videos/distribution.mp4
+    figures:
+      - runs/shift_b0/figures/binning_e1_density.png
+      - runs/shift_b0/figures/binning_e1_e2_density.png
+      - runs/shift_b0/figures/binning_e1_v1_density.png
+      - runs/shift_b0/figures/binning_v1_density.png
+      - runs/shift_b0/figures/binning_v1_v2_density.png
+      - runs/shift_b0/figures/binning_v2_density.png
+      - runs/shift_b0/figures/deviation.png
+      - runs/shift_b0/figures/distribution.png
+      - runs/shift_b0/figures/scalars.png
+
+  - name: gyro
+    description: "gyro-Maxwellian with the same profiles in the flux label of the position (control, not an equilibrium)"
+    params: params_tokamak_equilibrium.py
+    command: "mpirun -n 4 python params_tokamak_equilibrium.py --sim-folder gyro --save-step 5 --init gyro"  # or: bash run_case.sh gyro --init gyro
+    pproc: "python pproc_tokamak_equilibrium.py gyro --save-step 5 --init gyro --video"
+    videos:
+      - runs/gyro/videos/distribution.mp4
+    figures:
+      - runs/gyro/figures/binning_e1_density.png
+      - runs/gyro/figures/binning_e1_e2_density.png
+      - runs/gyro/figures/binning_e1_v1_density.png
+      - runs/gyro/figures/binning_v1_density.png
+      - runs/gyro/figures/binning_v1_v2_density.png
+      - runs/gyro/figures/binning_v2_density.png
+      - runs/gyro/figures/deviation.png
+      - runs/gyro/figures/distribution.png
+      - runs/gyro/figures/scalars.png
+
+  - name: eps0.02
+    description: "as base, epsilon = 0.02 (smaller drifts and orbit widths)"
+    params: params_tokamak_equilibrium.py
+    command: "mpirun -n 4 python params_tokamak_equilibrium.py --sim-folder eps0.02 --save-step 5 --epsilon 0.02"  # or: bash run_case.sh eps0.02 --epsilon 0.02
+    pproc: "python pproc_tokamak_equilibrium.py eps0.02 --save-step 5 --epsilon 0.02 --video"
+    videos:
+      - runs/eps0.02/videos/distribution.mp4
+    figures:
+      - runs/eps0.02/figures/binning_e1_density.png
+      - runs/eps0.02/figures/binning_e1_e2_density.png
+      - runs/eps0.02/figures/binning_e1_v1_density.png
+      - runs/eps0.02/figures/binning_v1_density.png
+      - runs/eps0.02/figures/binning_v1_v2_density.png
+      - runs/eps0.02/figures/binning_v2_density.png
+      - runs/eps0.02/figures/deviation.png
+      - runs/eps0.02/figures/distribution.png
+      - runs/eps0.02/figures/scalars.png
+
+  - name: eps0.1
+    description: "as base, epsilon = 0.1 (larger drifts and orbit widths)"
+    params: params_tokamak_equilibrium.py
+    command: "mpirun -n 4 python params_tokamak_equilibrium.py --sim-folder eps0.1 --save-step 5 --epsilon 0.1"  # or: bash run_case.sh eps0.1 --epsilon 0.1
+    pproc: "python pproc_tokamak_equilibrium.py eps0.1 --save-step 5 --epsilon 0.1 --video"
+    videos:
+      - runs/eps0.1/videos/distribution.mp4
+    figures:
+      - runs/eps0.1/figures/binning_e1_density.png
+      - runs/eps0.1/figures/binning_e1_e2_density.png
+      - runs/eps0.1/figures/binning_e1_v1_density.png
+      - runs/eps0.1/figures/binning_v1_density.png
+      - runs/eps0.1/figures/binning_v1_v2_density.png
+      - runs/eps0.1/figures/binning_v2_density.png
+      - runs/eps0.1/figures/deviation.png
+      - runs/eps0.1/figures/distribution.png
+      - runs/eps0.1/figures/scalars.png
+
+  - name: dg2
+    description: "as base, both pushers discrete gradient 2nd order"
+    params: params_tokamak_equilibrium.py
+    command: "mpirun -n 4 python params_tokamak_equilibrium.py --sim-folder dg2 --save-step 5 --algo discrete_gradient_2nd_order"  # or: bash run_case.sh dg2 --algo discrete_gradient_2nd_order
+    pproc: "python pproc_tokamak_equilibrium.py dg2 --save-step 5 --algo discrete_gradient_2nd_order --video"
+    videos:
+      - runs/dg2/videos/distribution.mp4
+    figures:
+      - runs/dg2/figures/binning_e1_density.png
+      - runs/dg2/figures/binning_e1_e2_density.png
+      - runs/dg2/figures/binning_e1_v1_density.png
+      - runs/dg2/figures/binning_v1_density.png
+      - runs/dg2/figures/binning_v1_v2_density.png
+      - runs/dg2/figures/binning_v2_density.png
+      - runs/dg2/figures/deviation.png
+      - runs/dg2/figures/distribution.png
+      - runs/dg2/figures/scalars.png
+
+  - name: rk4
+    description: "as base, both pushers explicit RK4"
+    params: params_tokamak_equilibrium.py
+    command: "mpirun -n 4 python params_tokamak_equilibrium.py --sim-folder rk4 --save-step 5 --algo explicit --butcher rk4"  # or: bash run_case.sh rk4 --algo explicit --butcher rk4
+    pproc: "python pproc_tokamak_equilibrium.py rk4 --save-step 5 --algo explicit --butcher rk4 --video"
+    videos:
+      - runs/rk4/videos/distribution.mp4
+    figures:
+      - runs/rk4/figures/binning_e1_density.png
+      - runs/rk4/figures/binning_e1_e2_density.png
+      - runs/rk4/figures/binning_e1_v1_density.png
+      - runs/rk4/figures/binning_v1_density.png
+      - runs/rk4/figures/binning_v1_v2_density.png
+      - runs/rk4/figures/binning_v2_density.png
+      - runs/rk4/figures/deviation.png
+      - runs/rk4/figures/distribution.png
+      - runs/rk4/figures/scalars.png
