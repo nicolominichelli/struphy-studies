@@ -5,8 +5,8 @@ date: 2026-11-14
 draft: false
 struphy:
   # the Struphy commit the runs were made with (pip install "struphy @ git+https://github.com/struphy-hub/struphy@<commit>")
-  commit: 82f76f386
-  version: "3.6.1"
+  commit: e0351a835
+  version: "3.6.2"
 # one sentence, shown on the landing page
 summary: "A canonical Maxwellian of guiding centers in an ad hoc tokamak stays stationary up to t = 100 to the level of the Monte-Carlo noise with all three pushers, while a gyro-Maxwellian control and a canonical Maxwellian with the on-axis shift develop a parallel-velocity asymmetry from the radial shift of the passing orbits."
 thumbnail_caption: "Change f(100) - f(0) of the guiding-center distribution in (r, v_par): exact canonical Maxwellian (left), on-axis shift B0 (middle), gyro-Maxwellian control (right)"
@@ -30,8 +30,9 @@ description: |
   Grid 16 x 48 x 48, cubic splines, 25 markers per cell (921,600 markers, drawn uniformly on the disc, weights
   f0 / s0), dt = 0.2, T = 100 (500 steps), both pushers discrete gradient 1st order, markers leaving the plasma at
   r = a are removed. All runs use the same markers (seed 1234): the runs with epsilon = 0.05 and the same pusher
-  differ only in the weights. 4 MPI ranks, 30 - 51 min per run. The Struphy commit is on the branch of
-  struphy-hub/struphy#949 (the `--shift` flag and the pictures of this page); `run_case.sh` runs and post-processes
+  differ only in the weights. 4 MPI ranks, 30 - 51 min per run. The runs were made with 82f76f386 of
+  struphy-hub/struphy#949 (the `--shift` flag and the pictures of this page), merged as e0351a835 with the same code
+  of the example, the particles and the post-processing; `run_case.sh` runs and post-processes
   one run, `compare.py` makes the comparison.
 
   **Analysis** (`pproc_tokamak_equilibrium.py`). The markers are binned every 5 steps in r = eta1 a, in the
