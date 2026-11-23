@@ -2,11 +2,11 @@
 title: "Spurious modes of the discrete Lie derivative in linear MHD"
 date: 2026-11-20
 # drafts are not published on the site (preview them with: python tools/build_site.py --drafts)
-draft: true
+draft: false
 struphy:
   # the Struphy commit the runs were made with (pip install "struphy @ git+https://github.com/struphy-hub/struphy@<commit>")
-  commit: d0ecf8090c934185287af44ce1ab101cf4465728
-  version: "3.5.0"
+  commit: 1f5424ddd54e262afb6e997cccae3805eb6a4992
+  version: "3.6.2"
 # caption of the thumbnail on the landing page
 thumbnail_caption: "Kink time runs at dt = 0.5 (q model blue, variational orange): kinetic energy and its growth rate; at t = 250 both are taken over by a static grid-scale mode"
 # one sentence, shown on the landing page
@@ -36,7 +36,9 @@ description: |
   density, length 2 pi R0, pressure from the force balance plus the offset p0 = 0.1) on `IGAPolarCylinder` with C1
   polar splines, degree 3, 16 x 12 x N3 elements (N3 = 12 unless stated), 4 MPI ranks. **Kink case**: q = 0.7 -> 1.3,
   R0 = 3 (q = 1 at r = 0.71). Time runs: dt = 0.5, T = 400, smooth helical seed (m, n) = (1, -1), amplitude 1e-6. The
-  runs were made with the branch of struphy#951 (stacked on #950), before their merge.
+  runs were made with the branch of struphy#951 (stacked on #950) before their merge; with the merge commit
+  recorded here, short reruns (10 time steps, the eigenvalues of the blocks (1, 6), the kernel tables) give
+  bit-identical results.
 
   **Analysis.**
   - *Time runs* (`params_linear.py`, figure `python compare_timerun.py`): kinetic energy en_U and its local growth
