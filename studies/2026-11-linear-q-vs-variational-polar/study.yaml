@@ -2,11 +2,11 @@
 title: "Linear MHD on polar splines: q model vs. variational p model"
 date: 2026-11-17
 # drafts are not published on the site (preview them with: python tools/build_site.py --drafts)
-draft: true
+draft: false
 struphy:
   # the Struphy commit the runs were made with (pip install "struphy @ git+https://github.com/struphy-hub/struphy@<commit>")
-  commit: d0ecf8090c934185287af44ce1ab101cf4465728
-  version: "3.5.0"
+  commit: 1f5424ddd54e262afb6e997cccae3805eb6a4992
+  version: "3.6.2"
 # caption of the thumbnail on the landing page
 thumbnail_caption: "Relative error of the growth rate of the kink (left) and of the Suydam mode (right) against the time step, both models, exact eigenvalues of the one-step map"
 # one sentence, shown on the landing page
@@ -24,7 +24,8 @@ description: |
   variational model needs the L2 projections in its transport operators (`transport_projection="L2"`,
   struphy#950): with the commuting projector it has a spurious mode at the axis (finding 1). Its sound step uses the
   Kronecker preconditioner of the Schur complement (`schur_precond="StiffnessPreconditioner"`, struphy#951). The
-  study was run with the branch of struphy#951 (stacked on #950), before their merge.
+  study was run with the branch of struphy#951 (stacked on #950) before their merge; with the merge commit recorded
+  here, short reruns (10 time steps, the eigenvalues of the stable case at dt = 0.5) give bit-identical results.
 
   **Setup** (`cases.py`). Screw pinch (`ScrewPinch`, a = 1, B0 = 1, uniform density, length 2 pi R0, pressure from
   the force balance plus p0 = 0.1) on `IGAPolarCylinder` with C1 polar splines, degree 3, 16 x 12 x 12 elements (32
@@ -141,40 +142,12 @@ findings: |
      elements).** Kink time runs at dt = 0.5 grow with the kink eigenvalue up to t = 240 (the time-step-induced pair
      of the q model, 0.052 in this block, is hardly excited by the smooth seed), then both are taken over by a mode
      with gamma = 0.182 (q) and 0.184 (variational), m = +-1 and n = 6, the shortest axial wave of 12 axial
-     elements, grown from round-off. Its block has a real eigenvalue with exactly these growth rates, independent of
-     dt (0.185 at dt = 0.125) and of the radial resolution (identical with 32 radial elements); it exists in the
-     stable case too (0.120) and grows with the axial resolution (0.25 at 16, 0.31 at 24 axial elements, block
-     (1, N3 / 2)), while 8 axial elements are stable. Physically, (1, 6) is strongly stable (field-line bending at
-     k_z = 2). The mode is a smooth m = 1 shift of the whole cross-section, largest at the axis, whose sign alternates
-     from one axial element to the next, staggered with an m = 1 axial flow: u_z vanishes half an element off the
-     knots, the in-plane velocity at the knots.
-
-     The cause is a kernel of the projection of B0 x u into V1, the same in both models. With degree 3, the in-plane
-     components of a 2-form are quadratic splines along z, the in-plane components of a 1-form cubic. At the
-     alternating (shortest) wave the quadratic part vanishes at the knots, where Pi^1 interpolates, and is orthogonal
-     on every element to the alternating cubic, so the L2 projection gives zero too. A poloidal velocity at this
-     wave then creates no magnetic perturbation at all, and nothing restores it against the pressure gradient (the
-     Suydam criterion is violated near the axis of this screw pinch). The norm of b = -curl P(B0 x u) relative to u,
-     for a smooth m = 1 wave in one component of u, 12 axial elements:
-
-     | component of u | n = 1 | n = 4 | n = 5 | n = 6 (shortest) |
-     |---|---|---|---|---|
-     | u^2 (poloidal flux), Pi^1 / L2 | 2.18 / 2.18 | 2.09 / 2.50 | 1.35 / 2.27 | 1.2e-14 / 1.4e-14 |
-     | u^1 (radial flux), Pi^1 / L2 | 5.04 / 5.05 | 4.38 / 5.20 | 2.79 / 4.50 | 0.68 / 0.68 |
-     | u^3 (axial flux), Pi^1 / L2 | 0.41 / 0.41 | 0.47 / 0.47 | 0.51 / 0.51 | 0.54 / 0.54 |
-
-     With an odd number of axial elements there is no alternating wave: with 11 elements the poloidal component at
-     n = 5 gives 0.76 (Pi^1) and 1.56 (L2), and the blocks (1, 5) of 11 and (1, 6) of 13 axial elements have no
-     static growing mode in either model. An odd number avoids the kernel but does not remove the cause.
-
-     The kernel does not come from the polar splines (`check_nyquist_kernel.py --geom hollow|slab`, 12 axial
-     elements, n = 6, Pi^1 / L2): on a `HollowCylinder` (r = 0.2 to 1, no axis, no polar splines) with the same screw
-     pinch, the poloidal component gives 1.0e-14 / 1.0e-14 and the radial one 0.90 / 0.90; on a periodic slab with
-     B0 = e_z (`Cuboid`, `HomogenSlab`), both in-plane components give zero (1e-14 to 4e-14), while n = 1 to 5 give 2 to
-     6. It arises in any H(div) velocity discretization that projects B0 x u into V1 along a periodic direction with an
-     even number of elements; in the cylinders the radial component keeps a coupling only through the poloidal field.
-     Better quadrature or another projector into V1 cannot remove it (the L2 projection already gives zero); it needs a
-     change of the spaces in this coupling.
+     elements, grown from round-off. Its block has a real eigenvalue with these growth rates, independent of dt and
+     of the radial resolution; it exists in the stable case too (0.120), grows with the axial resolution (0.25 at 16,
+     0.31 at 24 axial elements) and is absent for an odd number of axial elements (11, 13). The cause is a spurious
+     kernel of the discrete Lie derivative curl P(B0 x u), the same in both models and for both projectors: the
+     velocity in H(div) does not bend the field lines at the alternating axial wave. It is analysed in the study
+     [Spurious modes of the discrete Lie derivative in linear MHD](https://struphy-hub.github.io/struphy-studies/studies/2026-11-discrete-lie-derivative/).
 
   ![Kink, time runs at dt = 0.5, T = 400, 16 x 12 x 12, helical seed (1, -1): left, the kinetic energy en_U; right, its local growth rate 0.5 d ln(en_U)/dt (10 time units windows); blue: q model, orange: variational; dashed: kink eigenvalue of the one-step map at dt = 0.5, dotted: fastest oscillating growing pair of the block (1, -1). From t = 250 both runs grow with the static mode of the block (1, 6).](media:figures/timerun_kink.png)
 
