@@ -54,6 +54,8 @@ description: |
     `python splines_parity.py`.
   - *Spectrum of a homogeneous slab* (`eig_slab.py`, in `run_checks.sh`, figure `python compare_slab.py`): the
     one-step map of each Bloch block of a periodic slab with B0 = e_z, against the exact ideal-MHD branches.
+  - *A third coupling* (`bash run_cc.sh`): `LinearMHD` with the magnetic field in H(curl) (weak induction, model
+    "cc" of `cases.py`), slab spectra along and across B0 and the blocks of the kink and Suydam screw pinches.
 findings: |
   | quantity | q model (Pi^1) | variational (L2) |
   |---|---|---|
@@ -148,7 +150,40 @@ findings: |
 
   ![Homogeneous slab, B0 = e_z, 8 x 8 x N3, blocks (1, 0, n3): frequencies of the discrete modes against the axial wave number, variational (orange) and q model (blue); circles: shear Alfven (velocity mostly u2), triangles: fast and slow, crosses: spurious omega = 0; black: exact shear Alfven (solid), fast (dashed), slow (dotted); grey: pure sound c_s |k|. Left N3 = 12 (alternating wave at n3 = 6), right N3 = 13.](media:figures/slab_spectrum.png)
 
-  8. **The opposite defect: grid-scale parallel flows get a spurious stiffness.** The exact Lie derivative does not
+  8. **Writing the coupling weakly moves the blind spot across B0: LinearMHD with B in H(curl).** In
+     `LinearMHD(b_space="Hcurl", projected=True)` (velocity in H(div), magnetic field a 1-form, energy-conserving
+     shear-Alfven step) the induction equation is weak, <d_t b, C> = -<(curl C) x B0, u> for all C in V1: B0 x u is
+     never projected into V1, it is tested against curl V1, a subspace of V2, whose in-plane components are quadratic
+     along z like those of u. Along z the parities match; across B0 the degree bookkeeping gives opposite parities
+     instead. Free boundary conditions (u.n = 0 weakly, as recommended for this model); `cases.py` model "cc",
+     commands in `run_cc.sh`.
+
+     | | B in H(curl) | q model | variational | exact |
+     |---|---|---|---|---|
+     | slab, alternating wave **along** B0, (1, 0, 6): shear Alfven / fast / slow | 2.00 / 6.84 / 0.56 | 0 / 1.90 / 0 | 0 / 1.90 / 0 | 2.0 / 6.84 / 0.56 |
+     | slab, alternating wave **across** B0, (4, 0, 1), N1 = 8 | 0 / 7.26 / 0 | 0.33 / 26.16 / 0.092 | 0.33 / 26.17 / 0.092 | 0.33 / 26.16 / 0.093 |
+     | kink, block (1, 6): static growth rate (dt = 0.5 and 0.25) | none (< 2e-11) | 0.182 | 0.184 | stable |
+     | kink, block (1, -1): kink growth rate (dt = 0.5) | 0.039 | 0.039 | 0.045 | unstable |
+     | kink, poloidal alternating blocks (6, 0), (6, -1) | none | none | none | stable |
+     | Suydam, (2, -1), dt = 0.25: 16 / 32 radial elements | 0.0016 / 0.0031 | 0.0086 / 0.0092* | 0.0109 / 0.0092* | unstable |
+     | Suydam, (6, 0), (6, -1), (6, -3), N2 = 12 (alternating) | none | (6, -3): none | | |
+     | Suydam, (6, -3) / (12, -6), N2 = 24 | 0.0020 / none | 0.0030 / | | (6, -3) unstable |
+
+     (* dt = 0.125.) In the slab the H(curl) coupling is the mirror image of the other two: exact at the alternating
+     wave along B0, while across B0 the shear Alfven and slow waves drop to zero and the fast wave to the sound
+     frequency c_s |k| = 7.26. In the screw pinch this blind spot gives no static growing mode in any block tried,
+     current- or pressure-driven, at N2 = 12 or 24: across B0 it removes magnetic compression and the (already small)
+     bending of poloidal grid-scale waves, not the dominant bending along B0. The physical modes are found (kink;
+     Suydam m = 6 at N2 = 24 within a factor 1.5 of the q model), but the Suydam mode (2, -1) converges much more
+     slowly in the radial resolution (from below: 0.0016, 0.0031 against 0.009), an error towards stability whose cause
+     is not identified. Like the q model it has growing pairs from the splitting at large omega dt (omega dt of about
+     2.6, gamma = 0.067 at dt = 0.5 and 0.037 at dt = 0.25 in block (1, 6), larger than the Suydam growth), and it is
+     not variational and has div b = 0 only weakly. No arrangement of the coupling removes the blind spot; this one
+     puts it where the screw pinch does not drive it.
+
+  ![Homogeneous slab, B0 = e_z, the three couplings: q model (blue), variational (orange), B in H(curl) with weak induction (green); circles: shear Alfven, triangles: fast and slow, crosses: spurious omega = 0; black: exact branches, grey: pure sound. Left: along B0, blocks (1, 0, n3) with N3 = 12; the H(curl) coupling is exact at the alternating wave n3 = 6. Right: across B0, blocks (n1, 0, 1) with N1 = 8 (log scale, omega = 0 at the bottom); only the H(curl) coupling loses the alternating wave n1 = 4.](media:figures/slab_spectrum_cc.png)
+
+  9. **The opposite defect: grid-scale parallel flows get a spurious stiffness.** The exact Lie derivative does not
      bend flows along B0. Approximating the parallel flow z = cos(k z) B0 in V2 and applying the discrete operator
      (`check_kernel_K.py`) gives the spurious bending s_h = |curl P(B0,h x z_h)| / |z_h|, the extra frequency the
      scheme gives to a flow that should have none. In the aligned slab s_h = 0 exactly. In the sheared screw pinch
@@ -163,13 +198,14 @@ findings: |
 
   ![Spurious bending s_h of the parallel flow z = cos(k z) B0 against the axial wave number k, kink screw pinch; orange solid: variational (L2), blue dashed: q model (Pi^1); circles: N3 = 12, squares: N3 = 13; black: sound frequency c_s k, dotted: k B_theta (both at r = 0.5). In the aligned slab s_h = 0 for all k.](media:figures/compare_kernel_K.png)
 
-  9. **What a remedy has to satisfy.** Both defects sit at the grid scale along or across B0 and come from the
+  10. **What a remedy has to satisfy.** Both defects sit at the grid scale along or across B0 and come from the
      velocity space, not from the projection (the L2 projection, kept for the energy, already gives zero). A velocity
      space for these models has to give, at the same time: a discrete bending comparable to the exact one for every
-     velocity (the inf-sup condition, finding 4), discrete parallel flows with no bending (finding 8), an exact
+     velocity (the inf-sup condition, finding 4), discrete parallel flows with no bending (finding 9), an exact
      divergence in V3 for the compression, and the variational structure (energy conservation, weak-curl current).
      For a sheared field no such space is known yet. An odd number of axial elements avoids the static mode in these
-     runs, but neither defect.
+     runs, but neither defect. Writing the coupling weakly with B in H(curl) (finding 8) moves the blind spot across
+     B0, where these equilibria do not drive it, but does not remove it.
 media:
   # the public link (without password) of the media folder on MPCDF DataShare, set by: python tools/study.py link
   share: https://datashare.mpcdf.mpg.de/s/LjxjgPMjZxRXiC6
@@ -186,6 +222,8 @@ figures:
     caption: "Spurious bending of parallel flows against k, variational (orange) and q model (blue), 12 and 13 axial elements, with the sound frequency and k B_theta."
   - path: figures/slab_spectrum.png
     caption: "Homogeneous slab: discrete shear Alfven, fast and slow frequencies against the axial wave number, with the exact branches; at the alternating wave (12 axial elements) shear Alfven and slow drop to zero and the fast wave to the sound frequency; 13 elements: no zero, but the shortest wave is still far off."
+  - path: figures/slab_spectrum_cc.png
+    caption: "Homogeneous slab, three couplings (q model, variational, B in H(curl)): along B0 only the H(curl) coupling keeps the alternating wave, across B0 only it loses it."
 runs:
   - name: q_kink_dt0.5
     description: q model (LinearMHDWithQ, B in H(div)), kink case, dt = 0.5, T = 400, 16 x 12 x 12, velocity saved

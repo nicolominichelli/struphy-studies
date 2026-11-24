@@ -25,7 +25,7 @@ from maybempi import MPI
 from cases import CASES, domain_and_equil, make_model, model_vectors
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--model", choices=["q", "var", "var_pi"], required=True)
+ap.add_argument("--model", choices=["q", "var", "var_pi", "cc"], required=True)
 ap.add_argument("--case", choices=list(CASES), required=True)
 ap.add_argument("--dt", type=float, required=True)
 ap.add_argument("--num-elements", type=int, nargs=3, default=None, help="default 16 12 12 (cylinder), 16 12 8 (torus)")
@@ -54,7 +54,9 @@ sim = Simulation(
     domain=domain,
     equil=equil,
     grid=grids.TensorProductGrid(num_elements=ne),
-    derham_opts=DerhamOptions(degree=(3, 3, 3), bcs=(("free", "dirichlet"), None, None), polar_splines=True),
+    # cc (B in H(curl)): free boundary conditions (u.n = 0 weakly), as recommended for b_space="Hcurl"
+    derham_opts=DerhamOptions(degree=(3, 3, 3), bcs=(("free", "free" if a.model == "cc" else "dirichlet"), None, None),
+                              polar_splines=True),
 )
 sim.allocate()
 from struphy.propagators.base import Propagator
@@ -62,7 +64,7 @@ from struphy.propagators.base import Propagator
 derham = Propagator.derham
 U, B, P, RHO = model_vectors(model, a.model)
 vecs = [U, B, P]
-bops = [derham.boundary_ops["2"], derham.boundary_ops["2"], None]
+bops = [derham.boundary_ops["2"], derham.boundary_ops["1" if a.model == "cc" else "2"], None]
 
 
 def comps(v):
@@ -127,10 +129,11 @@ def norm_fac(n3, n2=None):
 
 
 # the in-plane polar pair of a 2-form is a vector at the axis: it carries only the poloidal harmonics m = +-1
-segs_pol = [(f, sh, off) for f, c, kind, sh, off in layout if kind == "pol" and sh[0] == 2]
+# (a 1-form in H(curl) also has a scalar-like triple at the axis in its axial component, carrying m = 0 and m = +-1)
+segs_pol = [(f, c, sh, off) for f, c, kind, sh, off in layout if kind == "pol" and sh[0] in (2, 3)]
 if not torus and abs(mm) != 1:
     segs_pol = []
-assert not [sh for f, c, kind, sh, off in layout if kind == "pol" and sh[0] not in (0, 2)], "unexpected polar blocks"
+assert not [sh for f, c, kind, sh, off in layout if kind == "pol" and sh[0] not in (0, 2, 3)], "unexpected polar blocks"
 
 if torus:
     # block n: one column per non-toroidal index of every segment
@@ -166,23 +169,35 @@ if torus:
 
 else:
     # block (m, n): one column per ring of every tensor-product segment, one per in-plane polar pair
-    E2 = derham.extraction_ops["2"]
+    FORM = {0: "2", 1: "1" if a.model == "cc" else "2"}
 
-    def alpha(space):
-        al = []
-        for l in range(2):
-            w = space.zeros()
-            w.pol[0][l, 0] = 1.0
-            t1 = E2.T.dot(w)[1]
-            arr = t1.toarray()
-            if MPI.COMM_WORLD.Get_size() > 1:
-                arr = MPI.COMM_WORLD.allreduce(arr)
-            c = arr.reshape(tuple(t1.space.npts))[0, :, 0]
-            al.append(np.mean(c * np.exp(-2j * np.pi * mm * np.arange(c.size) / c.size)))
-        al = np.array(al)
-        return al, np.linalg.inv(np.array([al.real, al.imag]))
+    def alpha(f, c, k):
+        """m = +1 (alpha) and m = 0 (beta) Fourier coefficients, on ring 0 or 1 of the tensor-product component where
+        they are largest, of the k polar basis functions of component c of field f; and the real map from a complex
+        m = +1 amplitude w (with no m = 0 part) to the k polar coefficients."""
+        E = derham.extraction_ops[FORM[f]]
+        resp = []
+        for l in range(k):
+            w = vecs[f].space.zeros()
+            w.pol[c][l, 0] = 1.0
+            tps = E.T.dot(w)
+            rows = []
+            for j in range(3):
+                arr = tps[j].toarray()
+                if MPI.COMM_WORLD.Get_size() > 1:
+                    arr = MPI.COMM_WORLD.allreduce(arr)
+                arr = arr.reshape(tuple(tps[j].space.npts))
+                for r in range(2):
+                    cc_ = arr[r, :, 0]
+                    rows.append((np.mean(cc_ * np.exp(-2j * np.pi * mm * np.arange(cc_.size) / cc_.size)), np.mean(cc_)))
+            resp.append(rows)
+        resp = np.array(resp)  # (k, 6, 2)
+        best = int(np.argmax(np.abs(resp[:, :, 0]).sum(axis=0)))
+        al, be = resp[:, best, 0], np.real(resp[:, best, 1])
+        Mrows = [al.real, al.imag] + ([be] if k == 3 else [])
+        return al, np.linalg.inv(np.array(Mrows))
 
-    ALPHA = {f: alpha(vecs[f].space) for f, sh, off in segs_pol}
+    ALPHA = {(f, c): alpha(f, c, sh[0]) for f, c, sh, off in segs_pol}
     segs_tp = [(sh, off) for f, c, kind, sh, off in layout if kind == "tp"]
 
     def tph(sh):
@@ -194,9 +209,10 @@ else:
         kind, idx = cols[ic]
         e = np.zeros(ntot)
         if kind == "pol":
-            f, sh, off = segs_pol[idx]
+            f, c, sh, off = segs_pol[idx]
             w = np.exp(2j * np.pi * nn * np.arange(sh[1]) / sh[1])
-            e[off : off + int(np.prod(sh))] = (ALPHA[f][1] @ np.array([w.real, w.imag])).ravel()
+            rhs = [w.real, w.imag] + ([np.zeros(sh[1])] if sh[0] == 3 else [])
+            e[off : off + int(np.prod(sh))] = (ALPHA[(f, c)][1] @ np.array(rhs)).ravel()
         else:
             s, r = idx
             sh, off = segs_tp[s]
@@ -207,10 +223,10 @@ else:
 
     def coeffs(y):
         out = []
-        for f, sh, off in segs_pol:
+        for f, c, sh, off in segs_pol:
             Pp = y[off : off + int(np.prod(sh))].reshape(sh)
-            al = ALPHA[f][0]
-            out.append([np.mean((al[0] * Pp[0] + al[1] * Pp[1]) * np.exp(-2j * np.pi * nn * np.arange(sh[1]) / sh[1]))])
+            al = ALPHA[(f, c)][0]
+            out.append([np.mean((al @ Pp) * np.exp(-2j * np.pi * nn * np.arange(sh[1]) / sh[1]))])
         for sh, off in segs_tp:
             X = y[off : off + int(np.prod(sh))].reshape(sh)
             out.append((X * np.exp(-1j * tph(sh))[None]).sum(axis=(1, 2)) * norm_fac(sh[2], sh[1]) / (sh[1] * sh[2]))
@@ -219,9 +235,10 @@ else:
     def recon(cy):
         rec = np.zeros(ntot)
         i = 0
-        for f, sh, off in segs_pol:
+        for f, c, sh, off in segs_pol:
             w = cy[i] * np.exp(2j * np.pi * nn * np.arange(sh[1]) / sh[1])
-            rec[off : off + int(np.prod(sh))] = (ALPHA[f][1] @ np.array([w.real, w.imag])).ravel()
+            rhs = [w.real, w.imag] + ([np.zeros(sh[1])] if sh[0] == 3 else [])
+            rec[off : off + int(np.prod(sh))] = (ALPHA[(f, c)][1] @ np.array(rhs)).ravel()
             i += 1
         for sh, off in segs_tp:
             cc = cy[i : i + sh[0]]

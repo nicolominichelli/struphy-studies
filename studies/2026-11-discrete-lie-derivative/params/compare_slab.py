@@ -5,6 +5,10 @@ vector lies in the x-z plane, B0 = e_z), else fast or slow (u1, u3, p); modes wi
 
 Writes slab_spectrum.png and slab_spectrum.md (beside this file or in $STUDY_RUNS).
 
+Second figure, slab_spectrum_cc.png: the three discretizations of the magnetic coupling (q model, variational, and
+LinearMHD with the magnetic field in H(curl), "cc"), along B0 (blocks (1, 0, n3), N3 = 12) and across B0 (blocks
+(n1, 0, 1), N1 = 8, files eig_slab_<model>_z12_x01.json).
+
 Run: python compare_slab.py
 """
 
@@ -20,8 +24,8 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 RUNS = Path(os.environ.get("STUDY_RUNS", HERE))
-C = {"q": "#2a78d6", "var": "#eb6834"}
-LAB = {"q": "q model (Pi^1)", "var": "variational (L2)"}
+C = {"q": "#2a78d6", "var": "#eb6834", "cc": "#1a9e5c"}
+LAB = {"q": "q model (Pi^1)", "var": "variational (L2)", "cc": "B in H(curl) (weak induction)"}
 plt.rcParams.update({"figure.facecolor": "#fcfcfb", "axes.facecolor": "#fcfcfb", "axes.edgecolor": "#52514e",
                      "font.size": 10})
 
@@ -96,3 +100,61 @@ fig.savefig(RUNS / "slab_spectrum.png", dpi=150, bbox_inches="tight")
 open(RUNS / "slab_spectrum.md", "w").write("\n".join(lines) + "\n")
 print("\n".join(lines))
 print("wrote slab_spectrum.png, slab_spectrum.md in", RUNS)
+
+# ---------------------------------------------------------------- the three couplings, along and across B0
+fig, axs = plt.subplots(1, 2, figsize=(12, 4.6))
+lines = ["Slab, the three couplings: discrete omega / exact (shear Alfven, fast, slow) at the alternating waves", "",
+         "| wave | model | shear Alfven | fast | slow |", "|---|---|---|---|---|"]
+for ax, kind in zip(axs, ("along", "across")):
+    files = {m: json.load(open(RUNS / (f"eig_slab_{m}_z12_k10.json" if kind == "along" else f"eig_slab_{m}_z12_x01.json")))
+             for m in ("var", "q", "cc")}
+    d0 = files["var"]
+    L = d0["L"]
+    cs = np.sqrt(d0["gamma_ad"] * d0["beta"] / 2)
+    nmax = max(r["n"][2 if kind == "along" else 0] for r in d0["rows"])
+    Ld = L[2] if kind == "along" else L[0]
+    kf = np.linspace(0, 2 * np.pi * nmax / Ld, 200)
+    kx, kz = (np.full_like(kf, 2 * np.pi / L[0]), kf) if kind == "along" else (kf, np.full_like(kf, 2 * np.pi / L[2]))
+    k2 = kx**2 + kz**2
+    ss = k2 * (1 + cs**2) / 2
+    dd = np.sqrt(ss**2 - k2 * kz**2 * cs**2)
+    ax.plot(kf, np.abs(kz), "k-", lw=1, label="exact shear Alfven")
+    ax.plot(kf, np.sqrt(ss + dd), "k--", lw=1, label="exact fast")
+    ax.plot(kf, np.sqrt(np.maximum(ss - dd, 0)), "k:", lw=1, label="exact slow")
+    ax.plot(kf, cs * np.sqrt(k2), "-", color="#bbb", lw=1, label="pure sound c_s |k|")
+    for model, dx in (("var", -0.015), ("q", 0.0), ("cc", 0.015)):
+        for row in files[model]["rows"]:
+            nd = row["n"][2 if kind == "along" else 0]
+            kk = 2 * np.pi * nd / Ld
+            off = dx * kf[-1] / 2
+            zero = 0.0 if kind == "along" else 0.03  # log axis across B0: omega = 0 drawn at its bottom
+            pos, nzero = modes(row)
+            for o, alf in pos:
+                ax.plot(kk + off, o, "o" if alf else "^", color=C[model], ms=5, mfc="none" if alf else C[model])
+            if nzero > 1 and row["exact"]["alfven"] > 1e-9 and nd > 0:
+                ax.plot(kk + off, zero, "x", color=C[model], ms=9, mew=2)
+            if nd == nmax:
+                ex = row["exact"]
+                alf = [o for o, a_ in pos if a_]
+                oth = sorted(o for o, a_ in pos if not a_)
+                lines.append(f"| {kind} B0, n = {tuple(row['n'])} | {model} | {(alf[0] if alf else 0.0):.3f} / "
+                             f"{ex['alfven']:.3f} | {(oth[-1] if oth else 0.0):.3f} / {ex['fast']:.3f} | "
+                             f"{(oth[0] if len(oth) > 1 else 0.0):.3f} / {ex['slow']:.3f} |")
+    for model in ("var", "q", "cc"):
+        ax.plot([], [], "^", color=C[model], label=LAB[model])
+    ax.plot([], [], "kx", mew=2, label="spurious omega = 0")
+    ax.axvline(np.pi * (12 if kind == "along" else 8) / Ld, color="#888", lw=0.8)
+    if kind == "along":
+        ax.set(xlabel="axial wave number k_z (k_x = 2 pi)", ylabel="frequency omega",
+               title="along B0: blocks (1, 0, n3), N3 = 12 (n3 = 6 alternating)")
+    else:
+        ax.set(xlabel="wave number across B0, k_x (k_z = 2 pi / Lz)", ylabel="frequency omega (omega = 0 at the bottom)", yscale="log", ylim=(0.02, 40),
+               title="across B0: blocks (n1, 0, 1), N1 = 8 (n1 = 4 alternating)")
+axs[0].legend(fontsize=7, loc="upper left")
+fig.suptitle("Homogeneous slab, B0 = e_z: which coupling loses which alternating wave (circles: shear Alfven, "
+             "triangles: fast / slow)", fontsize=11)
+fig.tight_layout()
+fig.savefig(RUNS / "slab_spectrum_cc.png", dpi=150, bbox_inches="tight")
+with open(RUNS / "slab_spectrum_cc.md", "w") as f:
+    f.write("\n".join(lines) + "\n")
+print("\n".join(lines))

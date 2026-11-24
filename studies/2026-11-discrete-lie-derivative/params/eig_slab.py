@@ -25,11 +25,14 @@ from maybempi import MPI
 from cases import make_model, model_vectors
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--model", choices=["q", "var", "var_pi"], required=True)
+ap.add_argument("--model", choices=["q", "var", "var_pi", "cc"], required=True)
 ap.add_argument("--nz", type=int, default=12)
 ap.add_argument("--nxy", type=int, nargs=2, default=[8, 8])
 ap.add_argument("--n12", type=int, nargs=2, default=[1, 0], help="in-plane wave numbers (n1, n2) of the blocks")
 ap.add_argument("--dt", type=float, default=0.02)
+ap.add_argument("--scan", choices=["n3", "n1"], default="n3",
+                help="n3: blocks (n1, n2, 0..N3/2) (along B0); n1: blocks (0..N1/2, n2, n3) with n3 = --n3 (across B0)")
+ap.add_argument("--n3", type=int, default=1, help="axial wave number of the blocks of --scan n1")
 a = ap.parse_args()
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -41,7 +44,8 @@ L = (1.0, 1.0, 2 * np.pi * R0)
 ne = (a.nxy[0], a.nxy[1], a.nz)
 model = make_model(a.model)
 here = os.path.dirname(os.path.abspath(__file__))
-out = os.path.join(os.environ.get("STUDY_RUNS", here), f"eig_slab_{a.model}_z{a.nz}_k{a.n12[0]}{a.n12[1]}.json")
+tag = f"k{a.n12[0]}{a.n12[1]}" if a.scan == "n3" else f"x{a.n12[1]}{a.n3}"
+out = os.path.join(os.environ.get("STUDY_RUNS", here), f"eig_slab_{a.model}_z{a.nz}_{tag}.json")
 sim = Simulation(
     model=model,
     env=EnvironmentOptions(out_folders=os.path.join(here, "sims"), sim_folder=f"eig_slab_{a.model}_z{a.nz}"),
@@ -55,7 +59,7 @@ sim.allocate()
 
 U, B, P, RHO = model_vectors(model, a.model)
 vecs = [U, B, P]
-NAMES = ["u1", "u2", "u3", "b1", "b2", "b3", "p" if a.model != "q" else "sqrt_p"]
+NAMES = ["u1", "u2", "u3", "b1", "b2", "b3", "p" if a.model != "q" else "sqrt_p"]  # b: 1-form for cc
 
 
 def blocks(v):
@@ -129,8 +133,9 @@ def exact(n):
 
 rows = []
 t0 = time.time()
-for n3 in range(0, a.nz // 2 + 1):
-    n = (a.n12[0], a.n12[1], n3)
+blocks_n = ([(a.n12[0], a.n12[1], n3) for n3 in range(a.nz // 2 + 1)] if a.scan == "n3"
+            else [(n1, a.n12[1], a.n3) for n1 in range(ne[0] // 2 + 1)])
+for n in blocks_n:
     A, leak = block(n)
     lam, V = np.linalg.eig(A)
     omg, gam = np.angle(lam) / a.dt, np.log(np.abs(lam)) / a.dt

@@ -58,6 +58,23 @@ def domain_and_equil(case: str, num_elements: tuple):
 def make_model(name: str, tol: float = 1e-12):
     """The model ``name`` ("q", "var", "var_pi") with the options of the study (solver tolerance ``tol``)."""
     sp = SolverParameters(tol=tol, maxiter=5000)
+    if name == "cc":
+        # LinearMHD with the magnetic field in H(curl) (weak induction equation, no projection of B0 x u), exactly
+        # energy-conserving shear-Alfven step (projected=True; with polar splines the Hiptmair-Xu preconditioner is not
+        # available, "auto" then selects the mass-matrix preconditioner)
+        import dataclasses
+
+        from struphy.models import LinearMHD
+
+        model = LinearMHD(b_space="Hcurl", projected=True)
+        for prop in vars(model.propagators).values():
+            opts = prop.Options()
+            kw = {f: sp for f in ("solver_params", "solver_params_M3") if hasattr(opts, f)}
+            if hasattr(opts, "solver_params_M2n"):
+                kw["solver_params_M2n"] = SolverParameters(tol=1e-14, maxiter=5000)
+            if kw:
+                prop.options = dataclasses.replace(opts, **kw)
+        return model
     if name == "q":
         import dataclasses
 
